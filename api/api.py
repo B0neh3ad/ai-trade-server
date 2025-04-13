@@ -1,6 +1,10 @@
 import mojito
-from config import APP_KEY, APP_SECRET, ACC_NO
+from config import APP_KEY, APP_SECRET, ACC_NO, API_BASE_URL
 from .broker import KoreaInvestmentPlus, KoreaInvestmentWSPlus
+import asyncio
+import json
+from multiprocessing import Process, Queue
+import time
 
 broker = KoreaInvestmentPlus(
     api_key=APP_KEY,
@@ -36,14 +40,18 @@ def create_broker_ws(tr_id_list: list = None, tr_key_list: list = None, user_id:
     )
     return broker_ws
 
-def fetch_stock_price(symbol: str = "005930") -> dict:
+def fetch_domestic_stock_price(symbol: str = "005930") -> dict:
     """주식 현재가 조회"""
-    return broker.fetch_price(symbol)
+    data = broker.fetch_price(symbol)
+    print(data)
+    return data
 
-def fetch_futureoption_price(market_code: str = "F", symbol: str = "101S03") -> dict:
+def fetch_domestic_futureoption_price(market_code: str = "F", symbol: str = "101S03") -> dict:
     """선물옵션 현재가 조회"""
-    return broker.fetch_futureoption_price(market_code, symbol)
-
+    data = broker.fetch_futureoption_price(market_code, symbol)
+    print(data)
+    return data
+    
 if __name__ == "__main__":
-    print(fetch_stock_price())  # 테스트 실행
+    print(fetch_domestic_stock_price())  # 테스트 실행
 
