@@ -13,3 +13,6 @@ ACC_NO = os.getenv("ACC_NO")
 # 텔레그램 메시지 전송 정보
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+# FCM 서버 키
+FCM_SERVER_KEY = os.getenv("FCM_SERVER_KEY")

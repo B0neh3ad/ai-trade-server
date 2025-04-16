@@ -14,6 +14,20 @@ from Crypto.Util.Padding import unpad
 
 import mojito
 
+EXCHANGE_CODE = {
+    "홍콩": "HKS",
+    "뉴욕": "NYS",
+    "나스닥": "NAS",
+    "아멕스": "AMS",
+    "도쿄": "TSE",
+    "상해": "SHS",
+    "심천": "SZS",
+    "상해지수": "SHI",
+    "심천지수": "SZI",
+    "호치민": "HSX",
+    "하노이": "HNX"
+}
+
 execution_items = [
     "유가증권단축종목코드", "체결시간", "현재가", "전일대비부호", "전일대비",
     "전일대비율", "가중평균가격", "시가", "최고가", "최저가",
@@ -240,6 +254,38 @@ class KoreaInvestmentPlus(mojito.KoreaInvestment):
         resp = requests.get(url, headers=headers, params=params)
         return resp.json()
 
+    def fetch_oversea_price(self, symbol: str) -> dict:
+        """해외주식현재가/해외주식 현재체결가
+        Args:
+            symbol (str): 종목코드
+        Returns:
+            dict: API 개발 가이드 참조
+        """
+        path = "uapi/overseas-price/v1/quotations/price"
+        url = f"{self.base_url}/{path}"
+
+        # request header
+        headers = {
+           "content-type": "application/json",
+           "authorization": self.access_token,
+           "appKey": self.api_key,
+           "appSecret": self.api_secret,
+           "tr_id": "HHDFS00000300"
+        }
+
+        # query parameter
+        try:
+            exchange_code = EXCHANGE_CODE[self.exchange]
+        except KeyError:
+            exchange_code = EXCHANGE_CODE["나스닥"]
+        params = {
+            "AUTH": "",
+            "EXCD": exchange_code,
+            "SYMB": symbol
+        }
+        resp = requests.get(url, headers=headers, params=params)
+        return resp.json()
+
 class KoreaInvestmentWSPlus(Process):
     """WebSocket
     """
@@ -298,7 +344,7 @@ class KoreaInvestmentWSPlus(Process):
                     fmt["body"]["input"]["tr_key"] = tr_key
                     subscribe_data = json.dumps(fmt)
                     await websocket.send(subscribe_data)
-            print(subscribe_data)
+            print("[Websocket 구독 완료]", subscribe_data)
 
             # 체결 통보 등록
             # TODO: 국내 주식 외의 체결 통보도 등록할 수 있게 하기
@@ -310,14 +356,14 @@ class KoreaInvestmentWSPlus(Process):
 
             while True:
                 data = await websocket.recv()
-
                 if data[0] == '0':
                     tokens = data.split('|')
+                    print(tokens)
 
                     ### 1-1. 국내주식 호가, 체결가, 예상체결 ###
                     if tokens[1] == "H0STASP0": # 국내주식 호가
                         self.parse_orderbook(tokens[3])
-                    elif tokens[1] == "HOSTCNTO": # 국내주식 체결
+                    elif tokens[1] == "HOSTCNT0": # 국내주식 체결
                         self.parse_execution(tokens[2], tokens[3])
                     elif tokens[1] == "H0STANC0": # 국내주식 예상체결
                         self.parse_execution(tokens[2], tokens[3])

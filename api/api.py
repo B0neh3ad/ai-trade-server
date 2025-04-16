@@ -43,13 +43,19 @@ def create_broker_ws(tr_id_list: list = None, tr_key_list: list = None, user_id:
 def fetch_domestic_stock_price(symbol: str = "005930") -> dict:
     """주식 현재가 조회"""
     data = broker.fetch_price(symbol)
-    print(data)
+    print("[주식 현재가]", data)
     return data
 
 def fetch_domestic_futureoption_price(market_code: str = "F", symbol: str = "101S03") -> dict:
     """선물옵션 현재가 조회"""
     data = broker.fetch_futureoption_price(market_code, symbol)
-    print(data)
+    print("[선물옵션 현재가]", data)
+    return data
+
+def fetch_overseas_stock_price(symbol: str = "AAPL") -> dict:
+    """해외주식 현재가 조회"""
+    data = broker.fetch_oversea_price(symbol)
+    print("[해외주식 현재가]", data)
     return data
     
 if __name__ == "__main__":
