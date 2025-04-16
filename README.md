@@ -19,8 +19,6 @@ ACC_NO = {한국투자증권 계좌번호}
 
 TELEGRAM_BOT_TOKEN = {텔레그램 알림 봇의 token 값}
 TELEGRAM_CHAT_ID = {텔레그램 테스트 유저의 chat id}
-
-FCM_SERVER_KEY = {firebase FCM 서버의 key}
 ```
 
 3. python 가상환경을 활성화한 뒤, 실행에 필요한 python 패키지들을 설치합니다.
