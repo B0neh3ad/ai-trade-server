@@ -310,206 +310,244 @@ class KoreaInvestmentWSPlus(Process):
         self.aes_iv = None
         self.queue = Queue()
         self.base_url = "https://openapi.koreainvestment.com:9443"
+        self.base_ws_url = "ws://ops.koreainvestment.com:21000"
+        self.websocket = None
+        self.subscription = {}
 
     def run(self):
         asyncio.run(self.ws_client())
 
     async def ws_client(self):
-        uri = "ws://ops.koreainvestment.com:21000"
+        approval_key = self.get_approval()
+
+        self.websocket = await websockets.connect(self.base_ws_url, ping_interval=None)
+        # 체결, 호가 등록
+        for tr_id, tr_key in zip(self.tr_id_list, self.tr_key_list):
+            await self.update_subscription(True, tr_id, tr_key)
+
+        # 체결 통보 등록
+        # TODO: 국내 주식 외의 체결 통보도 등록할 수 있게 하기
+        if self.user_id is not None:
+            await self.update_subscription(True, "H0STCNI0", self.user_id)
+
+        try:
+            while True:
+                try:
+                    data = await self.websocket.recv()
+                    print("[Received Data via Websocket]\n", data)
+                    if data[0] == '0':
+                        tokens = data.split('|')
+                        ### 1-1. 국내주식 호가, 체결가, 예상체결 ###
+                        if tokens[1] == "H0STASP0": # 국내주식 호가
+                            self.parse_orderbook(tokens)
+                        elif tokens[1] == "H0STCNT0": # 국내주식 체결
+                            self.parse_execution(tokens)
+                        elif tokens[1] == "H0STANC0": # 국내주식 예상체결
+                            self.parse_execution(tokens)
+
+                        ### 1-3. 국내주식 시간외 호가, 체결가, 예상체결 ###
+                        elif tokens[1] == "H0STOAA0": # 국내주식 시간외호가
+                            self.parse_orderbook(tokens)
+                        elif tokens[1] == "H0STOUP0": # 국내주식 시간외체결
+                            self.parse_execution(tokens)
+                        elif tokens[1] == "H0STOAC0": # 국내주식 시간외예상체결
+                            self.parse_execution(tokens)
+
+                        ### 1-4. 국내지수 체결, 예상체결 ###
+                        elif tokens[1] == "H0UPCNT0": # 국내지수 체결
+                            self.parse_execution(tokens)
+                        elif tokens[1] == "H0UPANC0": # 국내지수 예상체결
+                            self.parse_execution(tokens)
+
+                        ### 1-5. ELW 호가, 체결가, 예상체결 ###
+                        elif tokens[1] == "H0EWASP0": # ELW 호가
+                            self.parse_orderbook(tokens)
+                        elif tokens[1] == "H0EWCNT0": # ELW 체결
+                            self.parse_execution(tokens)
+                        elif tokens[1] == "H0EWANC0": # ELW 예상체결
+                            self.parse_execution(tokens)
+
+                        ### 2-1. 해외주식 호가, 체결가 ###
+                        elif tokens[1] == "HDFSASP0": # 해외주식(미국) 호가
+                            self.parse_oversea_orderbook(tokens[3])
+                        elif tokens[1] == "HDFSASP1": # 해외주식(아시아) 호가
+                            self.parse_orderbook(tokens)
+                        elif tokens[1] == "HDFSCNT0": # 해외주식 체결
+                            self.parse_execution(tokens)
+
+                        ### 3-1. 국내 지수선물옵션 호가, 체결가, 체결통보 ###
+                        elif tokens[1] == "H0IFASP0": # 지수선물 호가
+                            self.parse_orderbook(tokens)
+                        elif tokens[1] == "H0IFCNT0": # 지수선물 체결
+                            self.parse_execution(tokens)
+                        elif tokens[1] == "H0IOASP0": # 지수옵션 호가
+                            self.parse_orderbook(tokens)
+                        elif tokens[1] == "H0IOCNT0": # 지수옵션 체결
+                            self.parse_execution(tokens)
+
+                        ### 3-2. 국내 상품선물 호가, 체결가 ###
+                        elif tokens[1] == "H0CFASP0": # 상품선물 호가
+                            self.parse_orderbook(tokens)
+                        elif tokens[1] == "H0CFCNT0": # 상품선물 체결
+                            self.parse_execution(tokens)
+
+                        ### 3-3. 국내 주식선물옵션 호가, 체결가 ###
+                        elif tokens[1] == "H0ZFASP0": # 주식선물 호가
+                            self.parse_orderbook(tokens)
+                        elif tokens[1] == "H0ZFCNT0": # 주식선물 체결
+                            self.parse_execution(tokens)
+                        elif tokens[1] == "H0ZFANC0": # 주식선물 예상체결
+                            self.parse_execution(tokens)
+                        elif tokens[1] == "H0ZOASP0": # 주식옵션 호가
+                            self.parse_orderbook(tokens)
+                        elif tokens[1] == "H0ZOCNT0": # 주식옵션 체결
+                            self.parse_execution(tokens)
+                        elif tokens[1] == "H0ZOANC0": # 주식옵션 예상체결
+                            self.parse_execution(tokens)
+
+                        ### 3-4. 국내 야간옵션(EUREX) 호가, 체결가, 예상체결 ###
+                        elif tokens[1] == "H0EUASP0": # 야간옵션(EUREX) 호가
+                            self.parse_orderbook(tokens)
+                        elif tokens[1] == "H0EUCNT0": # 야간옵션(EUREX) 체결
+                            self.parse_execution(tokens)
+                        elif tokens[1] == "H0EUANC0": # 야간옵션(EUREX) 예상체결
+                            self.parse_execution(tokens)
+
+                        ### 3-5. 국내 야간선물(CME) 호가, 체결가 ###
+                        elif tokens[1] == "H0MFASP0": # 야간선물(CME) 호가
+                            self.parse_orderbook(tokens)
+                        elif tokens[1] == "H0MFCNT0": # 야간선물(CME) 체결
+                            self.parse_execution(tokens)
+
+                        ### 4. 해외선물옵션 호가, 체결가 ###
+                        elif tokens[1] == "HDFFF010": # 해외선물옵션 호가
+                            self.parse_orderbook(tokens)
+                        elif tokens[1] == "HDFFF020": # 해외선물옵션 체결
+                            self.parse_execution(tokens)
+
+                        ### 5. 장내채권(일반채권) 호가, 체결가 / 채권지수 체결가 ###
+                        elif tokens[1] == "H0BJASP0": # 장내채권(일반채권) 호가
+                            self.parse_orderbook(tokens)
+                        elif tokens[1] == "H0BJCNT0": # 장내채권(일반채권) 체결
+                            self.parse_execution(tokens)
+                        elif tokens[1] == "H0BICNT0": # 채권지수 체결
+                            self.parse_execution(tokens)
+                    elif data[0] == '1':
+                        tokens = data.split('|')
+
+                        # 국내주식 체결 통보
+                        if tokens[1] == "H0STCNI0" or tokens[1] == "HOSTCNI9":
+                            self.parse_notice(tokens)
+
+                        # 해외주식 체결 통보
+                        elif tokens[1] == "H0GSCNI0" or tokens[1] == "H0GSCNI9":
+                            self.parse_notice(tokens)
+
+                        # 국내 지수/상품/주식 선물옵션 체결 통보
+                        elif tokens[1] == "H0IFCNI0" or tokens[1] == "H0IFCNI9":
+                            self.parse_notice(tokens)
+
+                        # 야간선물옵션(CME, EUREX) 체결 통보
+                        elif tokens[1] == "H0MFCNI0" or tokens[1] == "H0EUCNI0":
+                            self.parse_notice(tokens)
+
+                        # 해외선물옵션 체결 통보
+                        elif tokens[1] == "HDFFF2C0":
+                            self.parse_notice(tokens)
+                    else:
+                        ctrl_data = json.loads(data)
+                        tr_id = ctrl_data["header"]["tr_id"]
+
+                        if tr_id != "PINGPONG":
+                            rt_cd = ctrl_data["body"]["rt_cd"]
+                            if rt_cd == '1':  # 에러일 경우 처리
+                                break
+                            elif rt_cd == '0':  # 정상일 경우 처리
+                                # 체결통보 처리를 위한 AES256 KEY, IV 처리 단계
+
+                                # 국내주식
+                                if tr_id == "H0STCNI0" or tr_id == "H0STCNI9":
+                                    self.aes_key = ctrl_data["body"]["output"]["key"]
+                                    self.aes_iv = ctrl_data["body"]["output"]["iv"]
+
+                                # 해외주식
+                                elif tr_id == "H0GSCNI0":
+                                    self.aes_key = ctrl_data["body"]["output"]["key"]
+                                    self.aes_iv = ctrl_data["body"]["output"]["iv"]
+
+                                # 지수/상품/주식 선물옵션 & 야간선물옵션
+                                elif tr_id == "H0IFCNI0" or tr_id == "H0MFCNI0" or tr_id == "H0EUCNI0":
+                                    self.aes_key = ctrl_data["body"]["output"]["key"]
+                                    self.aes_iv = ctrl_data["body"]["output"]["iv"]
+
+                                # 해외선물옵션
+                                elif tr_id == "HDFFF2C0":
+                                    self.aes_key = ctrl_data["body"]["output"]["key"]
+                                    self.aes_iv = ctrl_data["body"]["output"]["iv"]
+
+                        elif tr_id == "PINGPONG":
+                            await self.websocket.send(data)
+                except websockets.exceptions.ConnectionClosedOK:
+                    print("✅ 웹소켓 정상 종료")
+                    break
+                except websockets.exceptions.ConnectionClosedError as e:
+                    print(f"⚠️ 웹소켓 연결 오류 (close frame 없음): {e}")
+                    break
+                except Exception as e:
+                    print(f"⚠️ 데이터 처리 중 에러: {e}")
+                    continue
+        except Exception as e:
+            print(f"가격 감시 중 오류 발생: {e}")
+
+    async def update_subscription(self, is_subscription: bool, tr_id: str, tr_key: str):
+        if self.websocket is None:
+            self.websocket = await websockets.connect(self.base_ws_url, ping_interval=None)
 
         approval_key = self.get_approval()
 
-        async with websockets.connect(uri, ping_interval=None) as websocket:
-            header = {
-                "approval_key": approval_key,
-                "personalseckey": "1",
-                "custtype": "P",
-                "tr_type": "1",
-                "content-type": "utf-8"
-            }
-            fmt = {
-                "header": header,
-                "body": {
-                    "input": {
-                        "tr_id": None,
-                        "tr_key": None,
-                    }
+        header = {
+            "approval_key": approval_key,
+            "personalseckey": "1",
+            "custtype": "P",
+            "tr_type": "1",
+            "content-type": "utf-8"
+        }
+        fmt = {
+            "header": header,
+            "body": {
+                "input": {
+                    "tr_id": None,
+                    "tr_key": None,
                 }
             }
+        }
 
-            # 체결, 호가 등록
-            for tr_id in self.tr_id_list:
-                for tr_key in self.tr_key_list:
-                    fmt["body"]["input"]["tr_id"] = tr_id
-                    fmt["body"]["input"]["tr_key"] = tr_key
-                    subscribe_data = json.dumps(fmt)
-                    await websocket.send(subscribe_data)
-            print("[Websocket 구독 완료]", subscribe_data)
-
-            # 체결 통보 등록
-            # TODO: 국내 주식 외의 체결 통보도 등록할 수 있게 하기
-            if self.user_id is not None:
-                fmt["body"]["input"]["tr_id"] = "H0STCNI0"
-                fmt["body"]["input"]["tr_key"] = self.user_id
-                subscribe_data = json.dumps(fmt)
-                await websocket.send(subscribe_data)
-
-            while True:
-                data = await websocket.recv()
-                if data[0] == '0':
-                    tokens = data.split('|')
-                    print(tokens)
-
-                    ### 1-1. 국내주식 호가, 체결가, 예상체결 ###
-                    if tokens[1] == "H0STASP0": # 국내주식 호가
-                        self.parse_orderbook(tokens[3])
-                    elif tokens[1] == "HOSTCNT0": # 국내주식 체결
-                        self.parse_execution(tokens[2], tokens[3])
-                    elif tokens[1] == "H0STANC0": # 국내주식 예상체결
-                        self.parse_execution(tokens[2], tokens[3])
-
-                    ### 1-3. 국내주식 시간외 호가, 체결가, 예상체결 ###
-                    elif tokens[1] == "H0STOAA0": # 국내주식 시간외호가
-                        self.parse_orderbook(tokens[3])
-                    elif tokens[1] == "H0STOUP0": # 국내주식 시간외체결
-                        self.parse_execution(tokens[2], tokens[3])
-                    elif tokens[1] == "H0STOAC0": # 국내주식 시간외예상체결
-                        self.parse_execution(tokens[2], tokens[3])
-
-                    ### 1-4. 국내지수 체결, 예상체결 ###
-                    elif tokens[1] == "H0UPCNT0": # 국내지수 체결
-                        self.parse_execution(tokens[2], tokens[3])
-                    elif tokens[1] == "H0UPANC0": # 국내지수 예상체결
-                        self.parse_execution(tokens[2], tokens[3])
-
-                    ### 1-5. ELW 호가, 체결가, 예상체결 ###
-                    elif tokens[1] == "H0EWASP0": # ELW 호가
-                        self.parse_orderbook(tokens[3])
-                    elif tokens[1] == "H0EWCNT0": # ELW 체결
-                        self.parse_execution(tokens[2], tokens[3])
-                    elif tokens[1] == "H0EWANC0": # ELW 예상체결
-                        self.parse_execution(tokens[2], tokens[3])
-
-                    ### 2-1. 해외주식 호가, 체결가 ###
-                    elif tokens[1] == "HDFSASP0": # 해외주식(미국) 호가
-                        self.parse_oversea_orderbook(tokens[3])
-                    elif tokens[1] == "HDFSASP1": # 해외주식(아시아) 호가
-                        self.parse_orderbook(tokens[3])
-                    elif tokens[1] == "HDFSCNT0": # 해외주식 체결
-                        self.parse_execution(tokens[2], tokens[3])
-
-                    ### 3-1. 국내 지수선물옵션 호가, 체결가, 체결통보 ###
-                    elif tokens[1] == "H0IFASP0": # 지수선물 호가
-                        self.parse_orderbook(tokens[3])
-                    elif tokens[1] == "H0IFCNT0": # 지수선물 체결
-                        self.parse_execution(tokens[2], tokens[3])
-                    elif tokens[1] == "H0IOASP0": # 지수옵션 호가
-                        self.parse_orderbook(tokens[3])
-                    elif tokens[1] == "H0IOCNT0": # 지수옵션 체결
-                        self.parse_execution(tokens[2], tokens[3])
-
-                    ### 3-2. 국내 상품선물 호가, 체결가 ###
-                    elif tokens[1] == "H0CFASP0": # 상품선물 호가
-                        self.parse_orderbook(tokens[3])
-                    elif tokens[1] == "H0CFCNT0": # 상품선물 체결
-                        self.parse_execution(tokens[2], tokens[3])
-
-                    ### 3-3. 국내 주식선물옵션 호가, 체결가 ###
-                    elif tokens[1] == "H0ZFASP0": # 주식선물 호가
-                        self.parse_orderbook(tokens[3])
-                    elif tokens[1] == "H0ZFCNT0": # 주식선물 체결
-                        self.parse_execution(tokens[2], tokens[3])
-                    elif tokens[1] == "H0ZFANC0": # 주식선물 예상체결
-                        self.parse_execution(tokens[2], tokens[3])
-                    elif tokens[1] == "H0ZOASP0": # 주식옵션 호가
-                        self.parse_orderbook(tokens[3])
-                    elif tokens[1] == "H0ZOCNT0": # 주식옵션 체결
-                        self.parse_execution(tokens[2], tokens[3])
-                    elif tokens[1] == "H0ZOANC0": # 주식옵션 예상체결
-                        self.parse_execution(tokens[2], tokens[3])
-
-                    ### 3-4. 국내 야간옵션(EUREX) 호가, 체결가, 예상체결 ###
-                    elif tokens[1] == "H0EUASP0": # 야간옵션(EUREX) 호가
-                        self.parse_orderbook(tokens[3])
-                    elif tokens[1] == "H0EUCNT0": # 야간옵션(EUREX) 체결
-                        self.parse_execution(tokens[2], tokens[3])
-                    elif tokens[1] == "H0EUANC0": # 야간옵션(EUREX) 예상체결
-                        self.parse_execution(tokens[2], tokens[3])
-
-                    ### 3-5. 국내 야간선물(CME) 호가, 체결가 ###
-                    elif tokens[1] == "H0MFASP0": # 야간선물(CME) 호가
-                        self.parse_orderbook(tokens[3])
-                    elif tokens[1] == "H0MFCNT0": # 야간선물(CME) 체결
-                        self.parse_execution(tokens[2], tokens[3])
-
-                    ### 4. 해외선물옵션 호가, 체결가 ###
-                    elif tokens[1] == "HDFFF010": # 해외선물옵션 호가
-                        self.parse_orderbook(tokens[3])
-                    elif tokens[1] == "HDFFF020": # 해외선물옵션 체결
-                        self.parse_execution(tokens[2], tokens[3])
-
-                    ### 5. 장내채권(일반채권) 호가, 체결가 / 채권지수 체결가 ###
-                    elif tokens[1] == "H0BJASP0": # 장내채권(일반채권) 호가
-                        self.parse_orderbook(tokens[3])
-                    elif tokens[1] == "H0BJCNT0": # 장내채권(일반채권) 체결
-                        self.parse_execution(tokens[2], tokens[3])
-                    elif tokens[1] == "H0BICNT0": # 채권지수 체결
-                        self.parse_execution(tokens[2], tokens[3])
-                elif data[0] == '1':
-                    tokens = data.split('|')
-
-                    # 국내주식 체결 통보
-                    if tokens[1] == "H0STCNI0" or tokens[1] == "HOSTCNI9":
-                        self.parse_notice(tokens[3])
-
-                    # 해외주식 체결 통보
-                    elif tokens[1] == "H0GSCNI0" or tokens[1] == "H0GSCNI9":
-                        self.parse_notice(tokens[3])
-
-                    # 국내 지수/상품/주식 선물옵션 체결 통보
-                    elif tokens[1] == "H0IFCNI0" or tokens[1] == "H0IFCNI9":
-                        self.parse_notice(tokens[3])
-
-                    # 야간선물옵션(CME, EUREX) 체결 통보
-                    elif tokens[1] == "H0MFCNI0" or tokens[1] == "H0EUCNI0":
-                        self.parse_notice(tokens[3])
-
-                    # 해외선물옵션 체결 통보
-                    elif tokens[1] == "HDFFF2C0":
-                        self.parse_notice(tokens[3])
-                else:
-                    ctrl_data = json.loads(data)
-                    tr_id = ctrl_data["header"]["tr_id"]
-
-                    if tr_id != "PINGPONG":
-                        rt_cd = ctrl_data["body"]["rt_cd"]
-                        if rt_cd == '1':  # 에러일 경우 처리
-                            break
-                        elif rt_cd == '0':  # 정상일 경우 처리
-                            # 체결통보 처리를 위한 AES256 KEY, IV 처리 단계
-
-                            # 국내주식
-                            if tr_id == "H0STCNI0" or tr_id == "H0STCNI9":
-                                self.aes_key = ctrl_data["body"]["output"]["key"]
-                                self.aes_iv = ctrl_data["body"]["output"]["iv"]
-
-                            # 해외주식
-                            elif tr_id == "H0GSCNI0":
-                                self.aes_key = ctrl_data["body"]["output"]["key"]
-                                self.aes_iv = ctrl_data["body"]["output"]["iv"]
-
-                            # 지수/상품/주식 선물옵션 & 야간선물옵션
-                            elif tr_id == "H0IFCNI0" or tr_id == "H0MFCNI0" or tr_id == "H0EUCNI0":
-                                self.aes_key = ctrl_data["body"]["output"]["key"]
-                                self.aes_iv = ctrl_data["body"]["output"]["iv"]
-
-                            # 해외선물옵션
-                            elif tr_id == "HDFFF2C0":
-                                self.aes_key = ctrl_data["body"]["output"]["key"]
-                                self.aes_iv = ctrl_data["body"]["output"]["iv"]
-
-                    elif tr_id == "PINGPONG":
-                        await websocket.send(data)
+        if is_subscription:
+            if (tr_id, tr_key) not in self.subscription:
+                fmt["header"]["tr_type"] = "1"
+                fmt["body"]["input"]["tr_id"] = tr_id
+                fmt["body"]["input"]["tr_key"] = tr_key
+                self.subscription[(tr_id, tr_key)] = 1
+            else:
+                self.subscription[(tr_id, tr_key)] += 1
+        else:  
+            if (tr_id, tr_key) not in self.subscription:
+                # cannot unsubscribe unsubscribed data
+                return
+            elif self.subscription[(tr_id, tr_key)] == 1:
+                fmt["header"]["tr_type"] = "2"
+                fmt["body"]["input"]["tr_id"] = tr_id
+                fmt["body"]["input"]["tr_key"] = tr_key
+                del self.subscription[(tr_id, tr_key)]
+            else:
+                self.subscription[(tr_id, tr_key)] -= 1
+        
+        if fmt["body"]["input"]["tr_id"] and fmt["body"]["input"]["tr_key"]:
+            subscribe_data = json.dumps(fmt)
+            await self.websocket.send(subscribe_data)
+            print("[Websocket 구독/구독해제 완료]\n", subscribe_data)
+        
+        print("[현재 구독상태]\n", self.subscription)
 
     def get_approval(self) -> str:
         """실시간 (웹소켓) 접속키 발급
@@ -536,35 +574,41 @@ class KoreaInvestmentWSPlus(Process):
         cipher = AES.new(self.aes_key.encode('utf-8'), AES.MODE_CBC, self.aes_iv.encode('utf-8'))
         return bytes.decode(unpad(cipher.decrypt(b64decode(cipher_text)), AES.block_size))
 
-    def parse_notice(self, notice_data: str):
+    def parse_notice(self, tokens: list[str]):
         """_summary_
         Args:
             notice_data (_type_): 주식 체잔 데이터
         """
+        code, notice_data = tokens[1], tokens[3]
+
         aes_dec_str = self.aes_cbc_base64_dec(notice_data)
         tokens = aes_dec_str.split('^')
         notice_data = dict(zip(notice_items, tokens))
-        self.queue.put(['체잔', notice_data])
+        self.queue.put([code, notice_data])
 
-    def parse_execution(self, count: str, execution_data: str):
+    def parse_execution(self, tokens: list[str]):
         """주식현재가 실시간 주식 체결가 데이터 파싱
         Args:
             count (str): the number of data
             execution_data (str): 주식 체결 데이터
         """
+        code, count, execution_data = tokens[1], tokens[2], tokens[3]
+
         tokens = execution_data.split('^')
         for i in range(int(count)):
             parsed_data = dict(zip(execution_items, tokens[i * 46: (i + 1) * 46]))
-            self.queue.put(['체결', parsed_data])
+            self.queue.put([code, parsed_data])
 
-    def parse_orderbook(self, orderbook_data: str):
+    def parse_orderbook(self, tokens: list[str]):
         """_summary_
         Args:
             orderbook_data (str): 주식 호가 데이터
         """
+        code, orderbook_data = tokens[1], tokens[3]
+
         recvvalue = orderbook_data.split('^')
         orderbook = dict(zip(orderbook_items, recvvalue))
-        self.queue.put(['호가', orderbook])
+        self.queue.put([code, orderbook])
 
     def parse_oversea_orderbook(self, orderbook_data: str):
         """_summary_
@@ -587,4 +631,3 @@ class KoreaInvestmentWSPlus(Process):
     def terminate(self):
         if self.is_alive():
             self.kill()
-

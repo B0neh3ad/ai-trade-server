@@ -1,27 +1,30 @@
-import threading
-from fastapi import FastAPI, WebSocket
-import asyncio
-import httpx
-from starlette.websockets import WebSocketState
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.responses import JSONResponse
+
+from multiprocessing import Process
+from contextlib import asynccontextmanager
+import asyncio
+import threading
+
+from pydantic import BaseModel
+import requests
+import httpx
+import websockets
+from starlette.websockets import WebSocketState, WebSocketDisconnect
+
 import signal
 import sys
-from multiprocessing import Process
 import time
-import websockets
-import requests
 
 from api.api import *
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from utils import signal_handler
+from global_vars import global_broker_ws, active_websockets
 
+import google.auth
+import google.auth.transport.requests
 import firebase_admin
-from firebase_admin import credentials, firestore, messaging
-
-app = FastAPI()
-
-# 활성화된 브로커 목록
-active_brokers: list[Process] = []
+from firebase_admin import credentials, firestore
 
 # 주가 감시 설정
 NOTIFICATION_EXPIRY_TIME = 30 * 60  # 30분 (초 단위)
@@ -32,6 +35,32 @@ cred = credentials.Certificate("./service-account.json")
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
+def start_listen_price():
+    asyncio.run(listen_price())
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup: realtime_ws 시작
+    lp_thread = threading.Thread(target=start_listen_price, daemon=True)
+    lp_thread.start()
+    print("서버 시작: 실시간 WebSocket 감시 시작")
+    
+    yield
+    
+    # shutdown: 모든 websocket 연결 종료
+    print("서버 종료. WebSocket 연결을 종료합니다.")
+    if global_broker_ws is not None:
+        try:
+            await global_broker_ws.websocket.close()
+        except Exception as e:
+            print(f"웹소켓 종료 중 에러: {e}")
+
+    # 종료를 위해 스레드 종료 대기 (필요에 따라 join 시간 조정)
+    lp_thread.join(timeout=5)
+
+# app = FastAPI()
+app = FastAPI(lifespan=lifespan)
+
 ################### REST API #####################
 
 # Register the signal handler
@@ -40,6 +69,39 @@ signal.signal(signal.SIGINT, signal_handler)
 @app.get("/")
 async def root():
     return {"message": "KOSPI200 Futures API Server is running"}
+
+@app.get("/push")
+async def push_notification():
+    fcm_tokens = get_device_tokens()
+    fcm_title = "Test"
+    fcm_body = "test"
+
+    print("디바이스 토큰 목록:", fcm_tokens)
+    
+    send_fcm_notification(
+        tokens=fcm_tokens,
+        title=fcm_title,
+        body=fcm_body
+    )
+    
+    return JSONResponse(content={"message": "Push notification sent"})
+
+class FCMTokenData(BaseModel):
+    userId: str
+    token: str
+
+@app.post("/fcmtoken")
+async def store_fcm_token(data: FCMTokenData):
+    try:
+        # Firestore에 user_tokens 컬렉션에 저장 (userId를 document id로 사용)
+        doc_ref = db.collection("user_tokens").document(data.userId)
+        doc_ref.set({
+            "token": data.token,
+            "timestamp": firestore.SERVER_TIMESTAMP,
+        })
+        return {"message": "Token stored successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/price")
 async def get_price(symbol: str = "005930"):
@@ -65,22 +127,15 @@ async def get_overseas_stock_price(symbol: str = "AAPL"):
 
 # Client와 handshake 수행
 async def perform_client_handshake(websocket: WebSocket) -> bool:
-    """
-    클라이언트와의 WebSocket 핸드셰이크를 수행합니다.
-    
-    Args:
-        websocket: WebSocket 연결 객체
-        
-    Returns:
-        bool: 핸드셰이크 성공 여부
-    """
     await websocket.accept()
-
     try:
         init_msg = await asyncio.wait_for(websocket.receive_text(), timeout=5)
     except asyncio.TimeoutError:
         print("⏰ 클라이언트가 READY를 보내지 않아서 연결 종료")
         await websocket.close()
+        return False
+    except WebSocketDisconnect:
+        print("💨 클라이언트가 핸드셰이크 중에 연결 종료됨")
         return False
 
     if init_msg != "READY":
@@ -97,55 +152,57 @@ async def websocket_handler(
     tr_id_list: list[str],
     tr_key_list: list[str]
 ):
-    # 클라이언트와 핸드셰이크 수행
-    if not await perform_client_handshake(websocket):
-        return
-
-    broker_ws = create_broker_ws(tr_id_list, tr_key_list)
-    broker_ws.start()
-
-    # Add the broker to the active brokers list
-    active_brokers.append(broker_ws)
-    
+    # 연결 추적
+    active_websockets.add(websocket)
     try:
-        while True:
-            try:
-                # Use asyncio.to_thread to prevent blocking
-                data_type, data = await asyncio.to_thread(broker_ws.get)
-
-                if websocket.application_state == WebSocketState.CONNECTED:
-                    await asyncio.sleep(0.05)
-                    await websocket.send_json(data)
-                else:
-                    print("⚠️ 웹소켓 연결 끊김")
+        if not await perform_client_handshake(websocket):
+            return
+        
+        global global_broker_ws
+        print("global_broker_ws:", global_broker_ws)
+        if global_broker_ws is None:
+            global_broker_ws = create_broker_ws(tr_id_list, tr_key_list)
+            global_broker_ws.start()
+        else:
+            for tr_id, tr_key in zip(tr_id_list, tr_key_list):
+                await global_broker_ws.update_subscription(True, tr_id, tr_key)
+        
+        try:
+            while True:
+                try:
+                    # Use asyncio.to_thread to prevent blocking
+                    code, data = await asyncio.to_thread(global_broker_ws.get)
+                    if websocket.application_state == WebSocketState.CONNECTED:
+                        await asyncio.sleep(0.05)
+                        await websocket.send_json(data)
+                    else:
+                        print("⚠️ 웹소켓 연결 끊김")
+                        break
+                except websockets.exceptions.ConnectionClosedOK:
+                    print("✅ 웹소켓 정상 종료")
                     break
-            except websockets.exceptions.ConnectionClosedError:
-                print("⚠️ 웹소켓 연결이 예기치 않게 종료됨")
-                break
-            except Exception as e:
-                print(f"⚠️ 데이터 처리 중 에러: {e}")
-                continue
-    except Exception as e:
-        print(f"⚠️ 웹소켓 핸들러 에러: {e}")
+                except websockets.exceptions.ConnectionClosedError as e:
+                    print(f"⚠️ 웹소켓 연결 오류 (close frame 없음): {e}")
+                    break
+                except Exception as e:
+                    print(f"⚠️ 데이터 처리 중 에러: {e}")
+                    continue
+        except Exception as e:
+            print(f"⚠️ 웹소켓 핸들러 에러: {e}")
+        finally:
+            for tr_id, tr_key in zip(tr_id_list, tr_key_list):
+                await global_broker_ws.update_subscription(False, tr_id, tr_key)
+            
+            if websocket.application_state != WebSocketState.DISCONNECTED:
+                try:
+                    await websocket.close()
+                except Exception as e:
+                    print(f"⚠️ 웹소켓 종료 중 에러: {e}")
+            
+            print("🧹 WebSocket 세션 종료")
     finally:
-        # Remove the broker from the active brokers list
-        if broker_ws in active_brokers:
-            active_brokers.remove(broker_ws)
-            if broker_ws.is_alive():
-                print(f"Terminating broker process {broker_ws.pid}")
-                broker_ws.terminate()
-                broker_ws.join(timeout=2)
-                if broker_ws.is_alive():
-                    print(f"Force killing broker process {broker_ws.pid}")
-                    broker_ws.kill()
-        
-        if websocket.application_state != WebSocketState.DISCONNECTED:
-            try:
-                await websocket.close()
-            except Exception as e:
-                print(f"⚠️ 웹소켓 종료 중 에러: {e}")
-        
-        print("🧹 WebSocket 세션 종료")
+        # 연결 추적 해제
+        active_websockets.discard(websocket)
 
 @app.websocket("/H0STASP0")
 async def websocket_orderbook(websocket: WebSocket):
@@ -155,11 +212,11 @@ async def websocket_orderbook(websocket: WebSocket):
         tr_key_list=["005930"]
     )
 
-@app.websocket("/HOSTCNT0")
+@app.websocket("/H0STCNT0")
 async def websocket_execution(websocket: WebSocket):
     await websocket_handler(
         websocket,
-        tr_id_list=["HOSTCNT0"],
+        tr_id_list=["H0STCNT0"],
         tr_key_list=["005930"]
     )
 
@@ -186,34 +243,50 @@ def get_device_tokens():
 
 # FCM 알림 전송 함수
 def send_fcm_notification(tokens, title, body):
-    message = messaging.MulticastMessage(
-        notification=messaging.Notification(
-            title=title,
-            body=body
-        ),
-        tokens=tokens
-    )
-    response = messaging.send_multicast(message)
-    print(f"FCM 메시지 전송 완료: {response}")
+    # FCM 전용 스코프 지정
+    scopes = ["https://www.googleapis.com/auth/firebase.messaging"]
+    credentials, project_id = google.auth.default(scopes=scopes)
+    request_obj = google.auth.transport.requests.Request()
+    credentials.refresh(request_obj)
+    access_token = credentials.token
 
+    url = f"https://fcm.googleapis.com/v1/projects/{project_id}/messages:send"
+    headers = {
+         "Authorization": f"Bearer {access_token}",
+         "Content-Type": "application/json; charset=UTF-8"
+    }
+    
+    for token in tokens:
+        message = {
+            "message": {
+                "token": token,
+                "notification": {
+                    "title": title,
+                    "body": body
+                }
+            }
+        }
+        response = httpx.post(url, json=message, headers=headers)
+        print(f"FCM 메시지 전송 완료: {response.status_code}, {response.text}")
 
 # 텔레그램 메시지 전송
 async def notify_telegram(message: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
+    params = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": message
     }
     async with httpx.AsyncClient() as client:
-        await client.post(url, json=payload)
+        await client.get(url, params=params)
+    print(f"텔레그램 메시지 전송 완료")
 
 # 알림 전송 통합
 async def notify_all(price: int, stock_code: str = "005930"):
     fcm_tokens = get_device_tokens()
     fcm_title = "📈 [주가 알림]"
-    fcm_body = f"{stock_code} 현재가: {price}원 도달!"
+    fcm_body = f"{stock_code} 현재가 {price}원 도달!"
 
-    telegram_message = f"📈 [주가 알림] {stock_code} 현재가: {price}원 도달!"
+    telegram_message = f"📈 [주가 알림] {stock_code} 현재가 {price}원 도달!"
 
     send_fcm_notification(
         tokens=fcm_tokens,
@@ -228,28 +301,32 @@ async def notify_all(price: int, stock_code: str = "005930"):
 async def listen_price(tr_key_list: list = None):
     if tr_key_list is None:
         tr_key_list = ["005930"]
-        
-    broker_ws = create_broker_ws(
-        tr_id_list=["H0STASP0"],  # 실시간 체결
-        tr_key_list=tr_key_list    # 삼성전자
-    )
-    broker_ws.start()
-    print(f"📡 WebSocket 연결됨: 005930 실시간 감시 시작")
-    
-    # 이미 알림을 보낸 가격을 추적하기 위한 딕셔너리 (가격: 타임스탬프)
+
+    tr_id_list = ["H0STOUP0"] * len(tr_key_list)
+
+    global global_broker_ws
+    global_broker_ws = create_broker_ws(tr_id_list=tr_id_list, tr_key_list=tr_key_list)
+    global_broker_ws.start()
+    print(f"📡 WebSocket 연결됨")
+
     notified_prices = {}
-    
-    # 마지막 정리 시간
     last_cleanup_time = time.time()
     
     try:
         while True:
-            data_type, data = broker_ws.get()
-            
-            if data_type == '체결':
+            code, data = await asyncio.to_thread(global_broker_ws.get)
+            execution_codes = [
+                "H0STCNT0", "H0STOUP0", "H0UPCNT0", "H0EWCNT0", "HDFSCNT0",
+                "H0IOCNT0", "H0CFCNT0", "H0ZFCNT0", "H0ZOCNT0", "H0EUCNT0",
+                "H0MFCNT0", "HDFFF020", "H0BJCNT0", "H0BICNT0"]
+            if code in execution_codes:
                 try:
-                    price = int(data['주식현재가'])
-                    print(f"[005930] 현재가: {price}원")
+                    price = int(data['현재가'])
+                    code = data["유가증권단축종목코드"]
+                    if code not in tr_key_list:
+                        continue
+
+                    print(f"[{code}] 현재가: {price}원")
                     current_time = time.time()
                     
                     # 만료된 알림 정리 (1분마다)
@@ -268,15 +345,15 @@ async def listen_price(tr_key_list: list = None):
                             await notify_all(price)
                 except (ValueError, KeyError) as e:
                     print(f"데이터 처리 오류: {e}")
+                except websockets.exceptions.ConnectionClosedOK:
+                    print("✅ 웹소켓 정상 종료")
+                    break
+                except websockets.exceptions.ConnectionClosedError as e:
+                    print(f"⚠️ 웹소켓 연결 오류 (close frame 없음): {e}")
+                    break
     except Exception as e:
         print(f"가격 감시 중 오류 발생: {e}")
     finally:
         # 웹소켓 프로세스 종료
-        broker_ws.terminate()
+        global_broker_ws.terminate()
         print("🔌 WebSocket 연결 종료")
-
-# @app.on_event("startup")
-# def start_realtime_ws():
-#     thread = threading.Thread(target=lambda: asyncio.run(listen_price()))
-#     thread.daemon = True
-#     thread.start()
