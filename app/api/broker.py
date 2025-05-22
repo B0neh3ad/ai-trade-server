@@ -1,12 +1,8 @@
 import json
-import pickle
 import asyncio
 from base64 import b64decode
 from multiprocessing import Process, Queue
-import datetime
 import requests
-import zipfile
-import os
 import pandas as pd
 import websockets
 from Crypto.Cipher import AES
@@ -29,7 +25,7 @@ EXCHANGE_CODE = {
 }
 
 execution_items = [
-    "유가증권단축종목코드", "체결시간", "현재가", "전일대비부호", "전일대비",
+    "종목코드", "체결시간", "현재가", "전일대비부호", "전일대비",
     "전일대비율", "가중평균가격", "시가", "최고가", "최저가",
     "매도호가1", "매수호가1", "체결거래량", "누적거래량", "누적거래대금",
     "매도체결건수", "매수체결건수", "순매수체결건수", "체결강도", "총매도수량",
@@ -175,6 +171,14 @@ oversea_orderbook_items = [
     "매도호가잔량10",
     "매수호가잔량대비10",
     "매도호가잔량대비10"
+]
+
+oversea_execution_items = [
+    "실시간종목코드", "종목코드", "소숫점자리수",
+    "현지영업일자", "현지일자", "현지시간", "한국일자", "한국시간",
+    "시가", "최고가", "최저가", "현재가", "대비구분", "전일대비", "전일대비율",
+    "매수호가", "매도호가", "매수호가잔량", "매도호가잔량",
+    "체결량", "거래량", "거래대금", "매도체결량", "매수체결량", "체결강도", "시장구분"
 ]
 
 future_orderbook_items = [
@@ -369,11 +373,11 @@ class KoreaInvestmentWSPlus(Process):
 
                         ### 2-1. 해외주식 호가, 체결가 ###
                         elif tokens[1] == "HDFSASP0": # 해외주식(미국) 호가
-                            self.parse_oversea_orderbook(tokens[3])
+                            self.parse_oversea_orderbook(tokens)
                         elif tokens[1] == "HDFSASP1": # 해외주식(아시아) 호가
                             self.parse_orderbook(tokens)
                         elif tokens[1] == "HDFSCNT0": # 해외주식 체결
-                            self.parse_execution(tokens)
+                            self.parse_oversea_execution(tokens)
 
                         ### 3-1. 국내 지수선물옵션 호가, 체결가, 체결통보 ###
                         elif tokens[1] == "H0IFASP0": # 지수선물 호가
@@ -492,6 +496,12 @@ class KoreaInvestmentWSPlus(Process):
                     break
                 except websockets.exceptions.ConnectionClosedError as e:
                     print(f"⚠️ 웹소켓 연결 오류 (close frame 없음): {e}")
+                    try:
+                        # close frame 전송 시도
+                        await self.websocket.close(code=1000, reason="Sending close frame manually")
+                        print("✅ 직접 close frame 전송 완료")
+                    except Exception as err:
+                        print(f"❗ close frame 전송 중 오류: {err}")
                     break
                 except Exception as e:
                     print(f"⚠️ 데이터 처리 중 에러: {e}")
@@ -500,9 +510,6 @@ class KoreaInvestmentWSPlus(Process):
             print(f"가격 감시 중 오류 발생: {e}")
 
     async def update_subscription(self, is_subscription: bool, tr_id: str, tr_key: str):
-        if self.websocket is None:
-            self.websocket = await websockets.connect(self.base_ws_url, ping_interval=None)
-
         approval_key = self.get_approval()
 
         header = {
@@ -545,8 +552,9 @@ class KoreaInvestmentWSPlus(Process):
         if fmt["body"]["input"]["tr_id"] and fmt["body"]["input"]["tr_key"]:
             subscribe_data = json.dumps(fmt)
             await self.websocket.send(subscribe_data)
-            print("[Websocket 구독/구독해제 완료]\n", subscribe_data)
+            print("[Websocket 구독/구독해제 요청 완료]\n", subscribe_data)
         
+        # TODO: 요청에 대한 응답을 받은 뒤에 구독 상태 update하기
         print("[현재 구독상태]\n", self.subscription)
 
     def get_approval(self) -> str:
@@ -595,8 +603,9 @@ class KoreaInvestmentWSPlus(Process):
         code, count, execution_data = tokens[1], tokens[2], tokens[3]
 
         tokens = execution_data.split('^')
+        items_count = len(execution_items)
         for i in range(int(count)):
-            parsed_data = dict(zip(execution_items, tokens[i * 46: (i + 1) * 46]))
+            parsed_data = dict(zip(execution_items, tokens[i * items_count: (i + 1) * items_count]))
             self.queue.put([code, parsed_data])
 
     def parse_orderbook(self, tokens: list[str]):
@@ -610,14 +619,29 @@ class KoreaInvestmentWSPlus(Process):
         orderbook = dict(zip(orderbook_items, recvvalue))
         self.queue.put([code, orderbook])
 
-    def parse_oversea_orderbook(self, orderbook_data: str):
+    def parse_oversea_execution(self, tokens: list[str]):
+        """_summary_
+        Args:
+            execution_data (str): 주식 체결 데이터
+        """
+        code, count, execution_data = tokens[1], tokens[2], tokens[3]
+        
+        tokens = execution_data.split('^')
+        items_count = len(oversea_execution_items)
+        for i in range(int(count)):
+            parsed_data = dict(zip(oversea_execution_items, tokens[i * items_count: (i + 1) * items_count]))
+            self.queue.put([code, parsed_data])
+
+    def parse_oversea_orderbook(self, tokens: list[str]):
         """_summary_
         Args:
             orderbook_data (str): 주식 호가 데이터
         """
+        code, orderbook_data = tokens[1], tokens[3]
+
         recvvalue = orderbook_data.split('^')
         orderbook = dict(zip(oversea_orderbook_items, recvvalue))
-        self.queue.put(['호가', orderbook])
+        self.queue.put([code, orderbook])
 
     def get(self):
         """get data from the queue

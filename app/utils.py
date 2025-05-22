@@ -3,6 +3,7 @@ import sys
 from global_vars import global_broker_ws
 
 def signal_handler(sig, frame):
+    # TODO: 구독 중이던 정보 전부 구독 취소하기
     print("\n🛑 Keyboard interrupt received. Shutting down gracefully...")
     try:
         if global_broker_ws.is_alive():

@@ -4,7 +4,7 @@ import asyncio
 import os
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
-from api.api import fetch_domestic_futureoption_price, fetch_domestic_stock_price
+from api.api import fetch_domestic_indexfuture_price, fetch_domestic_stock_price
 
 import google.auth
 import google.auth.transport.requests

@@ -1,0 +1,34 @@
+from app.noti.firebase import get_device_tokens, send_fcm_notification
+from app.noti.telegram import notify_telegram
+
+# 알림 전송 통합
+async def notify_all(price: int, stock_code: str = "005930", firebase_db=None):
+    fcm_tokens = get_device_tokens(firebase_db)
+    fcm_title = "📈 [주가 알림]"
+    fcm_body = f"{stock_code} 현재가 {price}원 도달!"
+
+    telegram_message = f"📈 [주가 알림] {stock_code} 현재가 {price}원 도달!"
+
+    send_fcm_notification(
+        tokens=fcm_tokens,
+        title=fcm_title,
+        body=fcm_body
+    )
+
+    # TODO: telegram ID 리스트를 가져오도록 수정
+    await notify_telegram(telegram_message)
+
+async def _push_notification(firebase_db):
+    fcm_tokens = get_device_tokens(firebase_db)
+    fcm_title = "Test"
+    fcm_body = "test"
+
+    print("디바이스 토큰 목록:", fcm_tokens)
+    
+    send_fcm_notification(
+        tokens=fcm_tokens,
+        title=fcm_title,
+        body=fcm_body
+    )
+    
+    return {"message": "Push notification sent"}
