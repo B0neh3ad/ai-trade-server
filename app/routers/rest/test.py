@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from app.noti import _push_notification
-from app.config import db
+from app.global_vars import db
 
 router = APIRouter()
 

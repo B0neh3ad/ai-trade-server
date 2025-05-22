@@ -1,6 +1,6 @@
 import mojito
 from config import APP_KEY, APP_SECRET
-from api.api import KoreaInvestmentWSPlus, fetch_domestic_stock_price, fetch_domestic_indexfuture_price
+from api import KoreaInvestmentWSPlus
 
 
 if __name__ == "__main__":

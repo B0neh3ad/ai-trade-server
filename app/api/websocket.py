@@ -15,12 +15,7 @@ def create_broker_ws(tr_id_list: list = None, tr_key_list: list = None, user_id:
     :param tr_key_list: 메세지를 받을 종목코드
     :param user_id: 체결통보용 htsid
     """
-    if tr_id_list is None:
-        tr_id_list = ['H0IFASP0'] # 국내지수선물호가
-
-    if tr_key_list is None:
-        tr_key_list = ["101W06"] # KOSPI200 지수선물
-
+    
     broker_ws = KoreaInvestmentWSPlus(
         api_key=APP_KEY,
         api_secret=APP_SECRET,

@@ -1,7 +1,8 @@
-# Signal handler for graceful shutdown
 import sys
-from global_vars import global_broker_ws
 
+from app.global_vars import global_broker_ws
+
+# Signal handler for graceful shutdown
 def signal_handler(sig, frame):
     # TODO: 구독 중이던 정보 전부 구독 취소하기
     print("\n🛑 Keyboard interrupt received. Shutting down gracefully...")

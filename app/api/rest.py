@@ -13,9 +13,9 @@ def fetch_domestic_stock_price(symbol: str = "005930") -> dict:
     print("[주식 현재가]", data)
     return data
 
-def fetch_domestic_indexfuture_price(market_code: str = "F", symbol: str = "101W06") -> dict:
+def fetch_domestic_futureoption_price(market_code: str = "F", symbol: str = "101W06") -> dict:
     """선물옵션 현재가 조회"""
-    data = broker.fetch_futureoption_price(market_code, symbol)
+    data = broker.fetch_domestic_futureoption_price(market_code, symbol)
     print("[선물옵션 현재가]", data)
     return data
 
