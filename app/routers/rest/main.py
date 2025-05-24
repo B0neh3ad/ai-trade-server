@@ -22,7 +22,7 @@ async def get_domestic_stock_price(symbol: str = "005930"):
 @router.post("/fcmtoken")
 async def store_fcm_token(data: FCMTokenData):
     try:
-        _store_fcm_token(data)
+        await _store_fcm_token(data)
         return {"message": "Token stored successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

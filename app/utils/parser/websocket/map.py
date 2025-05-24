@@ -19,7 +19,7 @@ class TRMeta:
 code별 response dataclass 추가 시 아래 코드(또는 _experiment/test_websocket.py) 참고
 https://github.com/koreainvestment/open-trading-api/blob/main/websocket/python/ws_domestic_overseas_all.py
 '''
-TR_CODE_MAP = {
+TR_ID_MAP = {
     ### 국내 지수선물 ###
     "H0IFASP0": TRMeta(
         MessageType.ORDERBOOK,

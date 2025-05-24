@@ -1,7 +1,9 @@
 import json
 import asyncio
 from base64 import b64decode
-from multiprocessing import Process, Queue
+from asyncio import Queue
+from typing import Dict, Set
+from fastapi import WebSocket
 import requests
 import pandas as pd
 import websockets
@@ -10,7 +12,8 @@ from Crypto.Util.Padding import unpad
 
 import mojito
 
-from app.utils.parser.websocket.map import TR_CODE_MAP, MessageType
+from app.test.websocket import fake_recv
+from app.utils.parser.websocket.map import TR_ID_MAP, MessageType
 
 EXCHANGE_CODE = {
     "홍콩": "HKS",
@@ -87,25 +90,17 @@ class KoreaInvestmentPlus(mojito.KoreaInvestment):
         resp = requests.get(url, headers=headers, params=params)
         return resp.json()
 
-class KoreaInvestmentWSPlus(Process):
+class KoreaInvestmentWSPlus:
     """WebSocket
     """
 
-    def __init__(self, api_key: str, api_secret: str, tr_id_list: list,
-                 tr_key_list: list, user_id: str = None):
-        """_summary_
-        Args:
-            api_key (str): _description_
-            api_secret (str): _description_
-            tr_id_list (list): _description_
-            tr_key_list (list): _description_
-            user_id (str, optional): _description_. Defaults to None.
-        """
-        super().__init__()
+    def __init__(self, api_key: str, api_secret: str, code_list: list = None,
+                 user_id: str = None):
+        
         self.api_key = api_key
         self.api_secret = api_secret
-        self.tr_id_list = tr_id_list
-        self.tr_key_list = tr_key_list
+        self.approval_key = None
+        self.code_list = code_list if code_list is not None else []
         self.user_id = user_id
         self.aes_key = None
         self.aes_iv = None
@@ -113,56 +108,35 @@ class KoreaInvestmentWSPlus(Process):
         self.base_url = "https://openapi.koreainvestment.com:9443"
         self.base_ws_url = "ws://ops.koreainvestment.com:21000"
         self.websocket = None
-        self.subscription = {}
-
-    def run(self):
-        asyncio.run(self.ws_client())
+        self.subscribed_to_broker: Set[str] = set()
 
     async def ws_client(self):
-        approval_key = self.get_approval()
-
+        self.approval_key = self.get_approval()
         self.websocket = await websockets.connect(self.base_ws_url, ping_interval=None)
-        # 체결, 호가 등록
-        for tr_id in self.tr_id_list:
-            for tr_key in self.tr_key_list:
-                await self.update_subscription(True, tr_id, tr_key)
-
-        # 체결 통보 등록
-        # TODO: 국내 주식 외의 체결 통보도 등록할 수 있게 하기
-        if self.user_id is not None:
-            await self.update_subscription(True, "H0STCNI0", self.user_id)
+        print(f"[ws_client] self.websocket: {self.websocket}, self.approval_key: {self.approval_key}")
+        if self.websocket is None or self.approval_key is None:
+            print("websocket 또는 approval key 초기화에 실패했습니다")
+            return
+        
+        # 감시할 종목 등록
+        self.code_list.append([True, "H0IFCNT0", "101W06"])
+        self.code_list.append([True, "H0MFCNT0", "101W06"])
+        
+        for is_subscribe, tr_id, tr_key in self.code_list:
+            # TODO: 체결 통보 코드는 self.user_id가 None이 아닌 경우에만 등록
+            await self.update_subscription(is_subscribe, tr_id, tr_key)
 
         try:
             while True:
                 try:
-                    data = await self.websocket.recv()
-                    if data[0] == '0':
+                    # data = await self.websocket.recv()
+                    data = await fake_recv()
+                    print("\n[Data (Broker -> Server)]")
+                    print(data)
+                    if data[0] in ['0', '1']:
+                        # 호가, 체결, 체결통보 중 하나인 경우
                         tokens = data.split('|')
-                        self.parse(tokens)
-
-                        # ### 국내 지수선물옵션 호가, 체결가, 체결통보 ###
-                        # if tokens[1] == "H0IFASP0": # 지수선물 호가
-                        #     self.parse_orderbook(tokens)
-                        # elif tokens[1] == "H0IFCNT0": # 지수선물 체결
-                        #     self.parse_execution(tokens)
-
-                        # ### 국내 야간선물(CME) 호가, 체결가 ###
-                        # elif tokens[1] == "H0MFASP0": # 야간선물(CME) 호가
-                        #     self.parse_orderbook(tokens)
-                        # elif tokens[1] == "H0MFCNT0": # 야간선물(CME) 체결
-                        #     self.parse_execution(tokens)
-
-                    elif data[0] == '1':
-                        tokens = data.split('|')
-                        self.parse(tokens)
-
-                        # # 국내 지수/상품/주식 선물옵션 체결 통보
-                        # if tokens[1] == "H0IFCNI0" or tokens[1] == "H0IFCNI9":
-                        #     self.parse_notice(tokens)
-
-                        # # 야간선물옵션(CME, EUREX) 체결 통보
-                        # elif tokens[1] == "H0MFCNI0" or tokens[1] == "H0EUCNI0":
-                        #     self.parse_notice(tokens)
+                        await self.parse(tokens)
                     else:
                         ctrl_data = json.loads(data)
                         tr_id = ctrl_data["header"]["tr_id"]
@@ -173,7 +147,7 @@ class KoreaInvestmentWSPlus(Process):
                                 break
                             elif rt_cd == '0':  # 정상일 경우 처리
                                 # 체결통보 처리를 위한 AES256 KEY, IV 처리 단계
-                                entry = TR_CODE_MAP[tr_id]
+                                entry = TR_ID_MAP[tr_id]
                                 if entry.type == MessageType.NOTICE:
                                     self.aes_key = ctrl_data["body"]["output"]["key"]
                                     self.aes_iv = ctrl_data["body"]["output"]["iv"]
@@ -199,11 +173,12 @@ class KoreaInvestmentWSPlus(Process):
             print(f"가격 감시 중 오류 발생: {e}")
 
     async def update_subscription(self, is_subscription: bool, tr_id: str, tr_key: str):
-        approval_key = self.get_approval()
-
+        print(f"[update_subscription] self.websocket: {self.websocket}, self.approval_key: {self.approval_key}")
+        if self.websocket is None or self.approval_key is None:
+            return
+        
         header = {
-            "approval_key": approval_key,
-            "personalseckey": "1",
+            "approval_key": self.approval_key,
             "custtype": "P",
             "tr_type": "1",
             "content-type": "utf-8"
@@ -219,32 +194,22 @@ class KoreaInvestmentWSPlus(Process):
         }
 
         if is_subscription:
-            if (tr_id, tr_key) not in self.subscription:
+            if f"{tr_id}:{tr_key}" not in self.subscribed_to_broker:
                 fmt["header"]["tr_type"] = "1"
                 fmt["body"]["input"]["tr_id"] = tr_id
                 fmt["body"]["input"]["tr_key"] = tr_key
-                self.subscription[(tr_id, tr_key)] = 1
-            else:
-                self.subscription[(tr_id, tr_key)] += 1
-        else:  
-            if (tr_id, tr_key) not in self.subscription:
-                # cannot unsubscribe unsubscribed data
-                return
-            elif self.subscription[(tr_id, tr_key)] == 1:
+                self.subscribed_to_broker.add(f"{tr_id}:{tr_key}")
+        else:
+            if f"{tr_id}:{tr_key}" in self.subscribed_to_broker:
                 fmt["header"]["tr_type"] = "2"
                 fmt["body"]["input"]["tr_id"] = tr_id
                 fmt["body"]["input"]["tr_key"] = tr_key
-                del self.subscription[(tr_id, tr_key)]
-            else:
-                self.subscription[(tr_id, tr_key)] -= 1
+                self.subscribed_to_broker.remove(f"{tr_id}:{tr_key}")
         
         if fmt["body"]["input"]["tr_id"] and fmt["body"]["input"]["tr_key"]:
             subscribe_data = json.dumps(fmt)
             await self.websocket.send(subscribe_data)
             print("[Websocket 구독/구독해제 요청 완료]\n", subscribe_data)
-        
-        # TODO: 요청에 대한 응답을 받은 뒤에 구독 상태 update하기
-        print("[현재 구독상태]\n", self.subscription)
 
     def get_approval(self) -> str:
         """실시간 (웹소켓) 접속키 발급
@@ -271,14 +236,16 @@ class KoreaInvestmentWSPlus(Process):
         cipher = AES.new(self.aes_key.encode('utf-8'), AES.MODE_CBC, self.aes_iv.encode('utf-8'))
         return bytes.decode(unpad(cipher.decrypt(b64decode(cipher_text)), AES.block_size))
 
-    def parse(self, tokens: list[str]):
-        code, data = tokens[1], tokens[3]
-        entry = TR_CODE_MAP[code]
+    async def parse(self, tokens: list[str]):
+        tr_id, data = tokens[1], tokens[3]
+        entry = TR_ID_MAP[tr_id]
 
         if entry.type == MessageType.ORDERBOOK:
             tokens = data.split('^')
+            tokens = tokens[:len(entry.model.__dataclass_fields__)]
             parsed_data = entry.model(*tokens)
-            self.queue.put([code, parsed_data])
+            tr_key = parsed_data.futs_shrn_iscd
+            await self.queue.put([tr_id, tr_key, parsed_data])
 
         elif entry.type == MessageType.EXECUTION:
             count = tokens[2]
@@ -286,23 +253,17 @@ class KoreaInvestmentWSPlus(Process):
             items_count = len(entry.model.__dataclass_fields__)
             for i in range(int(count)):
                 parsed_data = entry.model(*tokens[i * items_count: (i + 1) * items_count])
-                self.queue.put([code, parsed_data])
+                tr_key = parsed_data.futs_shrn_iscd
+                await self.queue.put([tr_id, tr_key, parsed_data])
 
         elif entry.type == MessageType.NOTICE:
             decoded_str = self.aes_cbc_base64_dec(data)
             tokens = decoded_str.split('^')
             parsed_data = entry.model(*tokens)
-            self.queue.put([code, parsed_data])
+            tr_key = parsed_data.futs_shrn_iscd
+            await self.queue.put([tr_id, tr_key, parsed_data])
 
-    def get(self):
-        """get data from the queue
-
-        Returns:
-            _type_: _description_
-        """
-        data = self.queue.get()
+    async def get(self):
+        data = await self.queue.get()
         return data
-
-    def terminate(self):
-        if self.is_alive():
-            self.kill()
+    

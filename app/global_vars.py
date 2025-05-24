@@ -1,6 +1,3 @@
-global_broker_ws = None
-active_websockets = set()
-
 # Firebase credential, database
 cred = None
 db = None
