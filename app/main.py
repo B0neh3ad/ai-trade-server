@@ -1,3 +1,4 @@
+import os
 from re import T
 from fastapi import FastAPI, WebSocket
 
@@ -20,8 +21,19 @@ import firebase_admin
 
 from app.utils.websocket import broadcast_data
 
+def write_service_account_file(file_path: str = "./service-account.json"):
+    json_str = os.getenv("SERVICE_ACCOUNT_JSON")
+    if not json_str:
+        raise RuntimeError("SERVICE_ACCOUNT_JSON environment variable is not set")
+
+    with open(file_path, "w") as f:
+        f.write(json_str)
+
 # 서비스 계정 키 JSON 경로
-cred = credentials.Certificate("./service-account.json")
+cred_path = "./service-account.json"
+if not os.path.exists(cred_path):
+    write_service_account_file(cred_path)
+cred = credentials.Certificate(cred_path)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
