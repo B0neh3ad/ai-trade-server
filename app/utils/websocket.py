@@ -73,6 +73,7 @@ async def broadcast_data(broker_ws: KoreaInvestmentWSPlus):
     global_broker_ws = broker_ws
 
     try:
+        key = None
         while True:
             try:
                 data = await broker_ws.get()
@@ -89,8 +90,8 @@ async def broadcast_data(broker_ws: KoreaInvestmentWSPlus):
                             "key": key,
                             "data": data_dict
                         }
-                        print("[Data (server -> client)]")
-                        print(send_data)
+                        # print("[Data (server -> client)]")
+                        # print(send_data)
                         await asyncio.sleep(0.05)
                         await websocket.send_json(send_data)
                     else:
@@ -110,6 +111,7 @@ async def broadcast_data(broker_ws: KoreaInvestmentWSPlus):
                 break
             except Exception as e:
                 print(f"⚠️ 데이터 처리 중 에러: {e}")
+                print(f"Subscribers[key]: {subscribers.get(key, set()).copy()}")
                 continue
     except Exception as e:
         print(f"⚠️ 웹소켓 핸들러 에러: {e}")

@@ -131,8 +131,8 @@ class KoreaInvestmentWSPlus:
                 try:
                     # data = await self.websocket.recv()
                     data = await fake_recv()
-                    print("\n[Data (Broker -> Server)]")
-                    print(data)
+                    # print("\n[Data (Broker -> Server)]")
+                    # print(data)
                     if data[0] in ['0', '1']:
                         # 호가, 체결, 체결통보 중 하나인 경우
                         tokens = data.split('|')
