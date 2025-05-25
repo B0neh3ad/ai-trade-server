@@ -113,7 +113,6 @@ class KoreaInvestmentWSPlus:
     async def ws_client(self):
         self.approval_key = self.get_approval()
         self.websocket = await websockets.connect(self.base_ws_url, ping_interval=None)
-        print(f"[ws_client] self.websocket: {self.websocket}, self.approval_key: {self.approval_key}")
         if self.websocket is None or self.approval_key is None:
             print("websocket 또는 approval key 초기화에 실패했습니다")
             return
@@ -173,7 +172,6 @@ class KoreaInvestmentWSPlus:
             print(f"가격 감시 중 오류 발생: {e}")
 
     async def update_subscription(self, is_subscription: bool, tr_id: str, tr_key: str):
-        print(f"[update_subscription] self.websocket: {self.websocket}, self.approval_key: {self.approval_key}")
         if self.websocket is None or self.approval_key is None:
             return
         

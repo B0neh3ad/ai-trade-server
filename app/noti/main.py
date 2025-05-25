@@ -1,9 +1,10 @@
+from app.global_vars import get_db
 from app.noti.firebase import get_device_tokens, send_fcm_notification
 from app.noti.telegram import notify_telegram
 
 # 알림 전송 통합
-async def notify_all(price: int, stock_code: str = "005930", firebase_db=None):
-    fcm_tokens = get_device_tokens(firebase_db)
+async def notify_all(price: int, stock_code: str = "005930"):
+    fcm_tokens = get_device_tokens()
     fcm_title = "📈 [주가 알림]"
     fcm_body = f"{stock_code} 현재가 {price}원 도달!"
 
@@ -18,8 +19,8 @@ async def notify_all(price: int, stock_code: str = "005930", firebase_db=None):
     # TODO: telegram ID 리스트를 가져오도록 수정
     await notify_telegram(telegram_message)
 
-async def _push_notification(firebase_db):
-    fcm_tokens = get_device_tokens(firebase_db)
+async def _push_notification():
+    fcm_tokens = get_device_tokens()
     fcm_title = "Test"
     fcm_body = "test"
 

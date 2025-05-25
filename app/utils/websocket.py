@@ -9,14 +9,13 @@ import asyncio
 
 from dataclasses import asdict
 
-from app.api.broker import KoreaInvestmentWSPlus
+from app.global_vars import get_broker_ws
 
 subscribers: Dict[str, Set[WebSocket]] = {}
-global_broker_ws = None
 
 # manage_subscription: client -> server 방향으로 subscription info 전달
 async def manage_subscription(websocket: WebSocket):
-    global global_broker_ws
+    broker_ws = get_broker_ws()
 
     my_subscriptions: Set[str] = set()
 
@@ -39,8 +38,8 @@ async def manage_subscription(websocket: WebSocket):
             if msg_type == "subscribe":
                 subscribers.setdefault(key, set()).add(websocket)
                 my_subscriptions.add(key)
-                if key not in global_broker_ws.subscribed_to_broker:
-                    await global_broker_ws.update_subscription(True, tr_id, tr_key)
+                if key not in broker_ws.subscribed_to_broker:
+                    await broker_ws.update_subscription(True, tr_id, tr_key)
                     print(f"Broker subscribe: {key}")
             
             elif msg_type == "unsubscribe":
@@ -48,7 +47,7 @@ async def manage_subscription(websocket: WebSocket):
                     subscribers[key].remove(websocket)
                     my_subscriptions.discard(key)
                     if not subscribers[key]:
-                        await global_broker_ws.update_subscription(False, tr_id, tr_key)
+                        await broker_ws.update_subscription(False, tr_id, tr_key)
                     print(f"Broker unsubscribe: {key}")
 
             print(f"Subscribers updated: {subscribers}")
@@ -61,16 +60,14 @@ async def manage_subscription(websocket: WebSocket):
                 subscribers[key].remove(websocket)
 
                 if not subscribers[key]:
-                    await global_broker_ws.update_subscription(False, tr_id, tr_key)
+                    await broker_ws.update_subscription(False, tr_id, tr_key)
                     print(f"Broker unsubscribe: {key}")
 
 # broadcast_data: server -> client 방향으로 subscribed info 전달
-async def broadcast_data(broker_ws: KoreaInvestmentWSPlus):    
+async def broadcast_data():    
+    broker_ws = get_broker_ws()
     if broker_ws is None:
         return
-    
-    global global_broker_ws
-    global_broker_ws = broker_ws
 
     try:
         key = None
@@ -93,7 +90,12 @@ async def broadcast_data(broker_ws: KoreaInvestmentWSPlus):
                         # print("[Data (server -> client)]")
                         # print(send_data)
                         await asyncio.sleep(0.05)
-                        await websocket.send_json(send_data)
+                        try:
+                            await websocket.send_json(send_data)
+                        except Exception as e:
+                            print(f"⚠️ 웹소켓 데이터 전송 중 에러: {e}")
+                            print(f"Subscribers[key]: {subscribers.get(key, set()).copy()}")
+                            continue
                     else:
                         print(f"⚠️ 웹소켓 연결 끊김: {websocket}")
                         subscribers[key].remove(websocket)
@@ -111,15 +113,8 @@ async def broadcast_data(broker_ws: KoreaInvestmentWSPlus):
                 break
             except Exception as e:
                 print(f"⚠️ 데이터 처리 중 에러: {e}")
-                print(f"Subscribers[key]: {subscribers.get(key, set()).copy()}")
                 continue
     except Exception as e:
         print(f"⚠️ 웹소켓 핸들러 에러: {e}")
-    finally:        
-        if websocket.application_state != WebSocketState.DISCONNECTED:
-            try:
-                await websocket.close()
-            except Exception as e:
-                print(f"⚠️ 웹소켓 종료 중 에러: {e}")
-        
+    finally:                
         print("WebSocket 세션 종료")

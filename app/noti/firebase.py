@@ -1,9 +1,27 @@
 import google.auth
 import google.auth.transport.requests
 import httpx
+from pydantic import BaseModel
+from firebase_admin import firestore
+
+from app.global_vars import get_db
+
+class FCMTokenData(BaseModel):
+    userId: str
+    token: str
+
+# 디바이스 토큰 저장
+async def _store_fcm_token(data: FCMTokenData):
+    db = get_db()
+    doc_ref = db.collection("user_tokens").document(data.userId)
+    doc_ref.set({
+        "token": data.token,
+        "timestamp": firestore.SERVER_TIMESTAMP,
+    })
 
 # Firestore에서 디바이스 토큰 목록 가져오기
-def get_device_tokens(db):
+def get_device_tokens():
+    db = get_db()
     tokens_ref = db.collection('user_tokens')  # 'user_tokens' 컬렉션에서 토큰 가져오기
     tokens = tokens_ref.stream()
     

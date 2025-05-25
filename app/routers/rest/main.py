@@ -2,10 +2,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.api.rest import fetch_domestic_futureoption_price, fetch_domestic_stock_price
+from app.noti.firebase import FCMTokenData, _store_fcm_token
 from app.noti.main import _push_notification
-
-from .firebase import _store_fcm_token, FCMTokenData
-from app.global_vars import db
 
 router = APIRouter()
 
@@ -25,13 +23,16 @@ async def store_fcm_token(data: FCMTokenData):
         await _store_fcm_token(data)
         return {"message": "Token stored successfully"}
     except Exception as e:
+        print(f"Error storing FCM token: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+### Test APIs ###
+
 @router.get("/")
 async def root():
     return {"message": "KOSPI200 Futures API Server is running"}
 
 @router.get("/push")
 async def push_notification():
-    content = await _push_notification(db)
+    content = await _push_notification()
     return JSONResponse(content=content)
