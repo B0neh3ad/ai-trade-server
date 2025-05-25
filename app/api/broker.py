@@ -128,8 +128,8 @@ class KoreaInvestmentWSPlus:
         try:
             while True:
                 try:
-                    # data = await self.websocket.recv()
-                    data = await fake_recv()
+                    data = await self.websocket.recv()
+                    # data = await fake_recv()
                     # print("\n[Data (Broker -> Server)]")
                     # print(data)
                     if data[0] in ['0', '1']:
