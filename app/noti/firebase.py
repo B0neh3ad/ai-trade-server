@@ -4,7 +4,7 @@ import httpx
 from pydantic import BaseModel
 from firebase_admin import firestore
 
-from app.global_vars import get_db
+from app.global_vars import get_cred, get_db
 
 class FCMTokenData(BaseModel):
     userId: str
@@ -35,6 +35,7 @@ def get_device_tokens():
 def send_fcm_notification(tokens, title, body):
     # FCM 전용 스코프 지정
     scopes = ["https://www.googleapis.com/auth/firebase.messaging"]
+    print("[DEBUG] cred:", get_cred())
     credentials, project_id = google.auth.default(scopes=scopes)
     request_obj = google.auth.transport.requests.Request()
     credentials.refresh(request_obj)

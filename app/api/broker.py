@@ -206,8 +206,22 @@ class KoreaInvestmentWSPlus:
         
         if fmt["body"]["input"]["tr_id"] and fmt["body"]["input"]["tr_key"]:
             subscribe_data = json.dumps(fmt)
-            await self.websocket.send(subscribe_data)
-            print("[Websocket 구독/구독해제 요청 완료]\n", subscribe_data)
+            try:
+                await self.websocket.send(subscribe_data)
+                print("[Websocket 구독/구독해제 요청 완료]\n", subscribe_data)
+            except websockets.exceptions.ConnectionClosedOK:
+                print("⚠️ 웹소켓 연결이 끊어졌습니다. 다시 연결합니다.")
+                await self.ws_client()
+            except websockets.exceptions.ConnectionClosedError as e:
+                print(f"⚠️ 웹소켓 연결 오류 (close frame 없음): {e}")
+                try:
+                    # close frame 전송 시도
+                    await self.websocket.close(code=1000, reason="Sending close frame manually")
+                    print("✅ 직접 close frame 전송 완료")
+                except Exception as err:
+                    print(f"❗ close frame 전송 중 오류: {err}")
+            except Exception as e:
+                print(f"⚠️ 웹소켓 구독/구독해제 요청 중 오류: {e}")
 
     def get_approval(self) -> str:
         """실시간 (웹소켓) 접속키 발급
