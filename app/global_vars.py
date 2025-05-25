@@ -8,7 +8,7 @@ cred = None
 db = None
 broker_ws = None
 
-def write_service_account_file(file_path: str = "./service-account.json"):
+def write_service_account_file(file_path: str = "/etc/secrets/service-account.json"):
     encoded = os.getenv("SERVICE_ACCOUNT_JSON_BASE64")
     if not encoded:
         raise RuntimeError("SERVICE_ACCOUNT_JSON_BASE64 environment variable is not set")
@@ -19,7 +19,7 @@ def write_service_account_file(file_path: str = "./service-account.json"):
 def get_cred():
     global cred
     if cred is None:
-        cred_path = "./service-account.json"
+        cred_path = "/etc/secrets/service-account.json"
         if not os.path.exists(cred_path):
             write_service_account_file(cred_path)
         cred = credentials.Certificate(cred_path)
