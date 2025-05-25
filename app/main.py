@@ -21,14 +21,6 @@ import firebase_admin
 from app.utils.websocket import broadcast_data
 import app.utils.websocket
 
-def write_service_account_file(file_path: str = "./service-account.json"):
-    json_str = os.getenv("SERVICE_ACCOUNT_JSON")
-    if not json_str:
-        raise RuntimeError("SERVICE_ACCOUNT_JSON environment variable is not set")
-
-    with open(file_path, "w") as f:
-        f.write(json_str)
-
 firebase_admin.initialize_app(get_cred())
 
 @asynccontextmanager

@@ -93,8 +93,11 @@ async def broadcast_data():
                         try:
                             await websocket.send_json(send_data)
                         except Exception as e:
-                            print(f"⚠️ 웹소켓 데이터 전송 중 에러: {e}")
-                            print(f"Subscribers[key]: {subscribers.get(key, set()).copy()}")
+                            err_msg = str(e)
+                            print(f"⚠️ 웹소켓 데이터 전송 중 에러: {err_msg}")
+                            # 특정 에러 메시지일 때만 제거
+                            if "Unexpected ASGI message 'websocket.send'" in err_msg:
+                                subscribers[key].remove(websocket)
                             continue
                     else:
                         print(f"⚠️ 웹소켓 연결 끊김: {websocket}")

@@ -1,3 +1,4 @@
+import base64
 import os
 from firebase_admin import credentials, firestore
 
@@ -8,10 +9,10 @@ db = None
 broker_ws = None
 
 def write_service_account_file(file_path: str = "./service-account.json"):
-    json_str = os.getenv("SERVICE_ACCOUNT_JSON")
-    if not json_str:
-        raise RuntimeError("SERVICE_ACCOUNT_JSON environment variable is not set")
-
+    encoded = os.getenv("SERVICE_ACCOUNT_JSON_BASE64")
+    if not encoded:
+        raise RuntimeError("SERVICE_ACCOUNT_JSON_BASE64 environment variable is not set")
+    json_str = base64.b64decode(encoded).decode()
     with open(file_path, "w") as f:
         f.write(json_str)
 
