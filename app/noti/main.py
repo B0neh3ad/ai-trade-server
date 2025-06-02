@@ -21,8 +21,8 @@ async def notify_all(price: int, stock_code: str = "005930"):
 
 async def _push_notification():
     fcm_tokens = get_device_tokens()
-    fcm_title = "Test"
-    fcm_body = "test"
+    fcm_title = "Recommendation"
+    fcm_body = "State_30_D, State_5_Z, State_20_U\\nRecommendations: 콜360 1개 short, 풋 360 1개 short, 풋 355 1개 long"
 
     print("디바이스 토큰 목록:", fcm_tokens)
     
