@@ -42,6 +42,16 @@ fastapi dev main.py
 ngrok http 8000
 ```
 
+## Data flow
+아래 순서대로 각 요소를 거치며 broker -> server -> client로 데이터가 전달됩니다.
+
+1. backend `api/broker`: 증권사 api와의 연결, 데이터 송수신을 직접 관리하는 class가 정의되어 있습니다.
+2. backend `api/rest`, `api/websocket`: broker 객체의 생성 및 이를 이용한 데이터 송수신 로직을 제공합니다.
+3. backend `routers`: API endpoint와 `api/rest`, `api/websocket` 내 함수들을 적절히 대응시킵니다.
+---
+4. frontend `lib/api`: Next.js의 각 component가 backend API를 호출할 수 있게 해주는 연결점 역할을 합니다.
+5. frontend `components`: `lib/api` 의 함수들을 이용해 적절한 데이터로 UI를 구성합니다.
+
 ## (한국투자증권 API) websocket `[tr_type, tr_id, tr_key]` 예제 정리
 ```python
 ### 1-1. 국내주식 호가, 체결가, 예상체결, 체결통보 ###
