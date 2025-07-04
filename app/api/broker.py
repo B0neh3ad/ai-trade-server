@@ -52,40 +52,75 @@ class KoreaInvestmentPlus(mojito.KoreaInvestment):
            "tr_id": "FHMIF10000000"
         }
         params = {
-            "fid_cond_mrkt_div_code": market_code,
-            "fid_input_iscd": symbol
+            "FID_COND_MRKT_DIV_CODE": market_code,
+            "FID_INPUT_ISCD": symbol
         }
         resp = requests.get(url, headers=headers, params=params)
         return resp.json()
 
-    def fetch_oversea_price(self, symbol: str) -> dict:
-        """해외주식현재가/해외주식 현재체결가
-        Args:
-            symbol (str): 종목코드
-        Returns:
-            dict: API 개발 가이드 참조
+    def fetch_domestic_futureoption_asking_price(self, market_code: str, symbol: str) -> dict:
         """
-        path = "uapi/overseas-price/v1/quotations/price"
+            선물옵션 시세호가 조회 API
+            Args:
+                market_code (str): 시장 분류코드
+                symbol (str): 종목코드
+            Returns:
+                dict: API 개발 가이드 참조
+        """
+        path = "/uapi/domestic-futureoption/v1/quotations/inquire-price"
         url = f"{self.base_url}/{path}"
-
-        # request header
         headers = {
            "content-type": "application/json",
            "authorization": self.access_token,
            "appKey": self.api_key,
            "appSecret": self.api_secret,
-           "tr_id": "HHDFS00000300"
+           "tr_id": "FHMIF10010000"
         }
-
-        # query parameter
-        try:
-            exchange_code = EXCHANGE_CODE[self.exchange]
-        except KeyError:
-            exchange_code = EXCHANGE_CODE["나스닥"]
         params = {
-            "AUTH": "",
-            "EXCD": exchange_code,
-            "SYMB": symbol
+            "FID_COND_MRKT_DIV_CODE": market_code,
+            "FID_INPUT_ISCD": symbol
+        }
+        resp = requests.get(url, headers=headers, params=params)
+        return resp.json()
+
+    def fetch_display_board_callput(self, market_class_code: str, maturity_contract: str) -> dict:
+        """
+            국내옵션전광판 콜풋 조회 API
+            (KOSPI200 옵션 조회에 활용)
+
+            주의: polling 방식으로 사용 시 1초에 최대 1건 조회 권장. (비용이 큼)
+
+            Args:
+                market_class_code (str): 시장 분류코드
+                - 공백: KOSPI200
+                - WKM: KOSPI200위클리(월)
+                - WKI: KOSPI200위클리(목)
+                
+                maturity_contract (str): 만기 계약
+                - FID_COND_MRKT_CLS_CODE가 공백(KOSPI200) 인 경우
+                    - 만기년월(YYYYMM) 입력 (ex. 202407)
+                - FID_COND_MRKT_CLS_CODE가 WKM(KOSPI200위클리(월)), WKI(KOSPI200위클리(목)) 인 경우
+                    - 만기년월주차(YYMMWW) 입력 (ex. 2024년도 7월 3주차인 경우, 240703 입력)
+            Returns:
+                dict: API 개발 가이드 참조
+        """
+
+        path = "/uapi/domestic-futureoption/v1/quotations/display-board-callput"
+        url = f"{self.base_url}/{path}"
+        headers = {
+            "content-type": "application/json",
+            "authorization": self.access_token,
+            "appKey": self.api_key,
+            "appSecret": self.api_secret,
+            "tr_id": "FHPIF05030100"
+        }
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "O",
+            "FID_COND_SCR_DIV_CODE": "20503",
+            "FID_MRKT_CLS_CODE": "CO", # 콜옵션
+            "FID_MTRT_CNT": maturity_contract,
+            "FID_COND_MRKT_CLS_CODE": market_class_code,
+            "FID_MRKT_CLS_CODE1": "PO", # 풋옵션
         }
         resp = requests.get(url, headers=headers, params=params)
         return resp.json()
@@ -117,9 +152,32 @@ class KoreaInvestmentWSPlus:
             print("websocket 또는 approval key 초기화에 실패했습니다")
             return
         
-        # 감시할 종목 등록
-        self.code_list.append([True, "H0IFCNT0", "101W06"])
-        self.code_list.append([True, "H0MFCNT0", "101W06"])
+        masterfile = pd.read_csv("/home/js1044k/ai-trade-server/app/_experiment/masterfiles/fo_idx_code_mts.csv")
+
+        ### 주/야간 지수선물 체결가 ###
+        self.code_list.append([True, "H0IFCNT0", "101W09"])
+        self.code_list.append([True, "H0MFCNT0", "101W09"]) # 야간선물(CME)
+
+        ### 주/야간 지수옵션 체결가 ###
+        # 구독해야 하는 코드가 너무 많아서 `MAX SUBSCRIBE OVER` 오류 발생.
+        # TODO: data 적으므로 rest api 이용 pooling으로 가야할 듯.
+
+        # # monthly option (최근월)
+        # code_list = masterfile[masterfile['단축코드'].str.startswith('201W07')]['단축코드'].tolist()
+        # code_list.extend(masterfile[masterfile['단축코드'].str.startswith('301W07')]['단축코드'].tolist())
+        # # monthly option (차근월)
+        # code_list.extend(masterfile[masterfile['단축코드'].str.startswith('201W08')]['단축코드'].tolist())
+        # code_list.extend(masterfile[masterfile['단축코드'].str.startswith('301W08')]['단축코드'].tolist())
+        # # weekly option (차주 월)
+        # code_list.extend(masterfile[masterfile['단축코드'].str.startswith('209E0W')]['단축코드'].tolist())
+        # code_list.extend(masterfile[masterfile['단축코드'].str.startswith('309E0W')]['단축코드'].tolist())
+        # # weekly option (차주 목)
+        # code_list.extend(masterfile[masterfile['단축코드'].str.startswith('2AFA1W')]['단축코드'].tolist())
+        # code_list.extend(masterfile[masterfile['단축코드'].str.startswith('3AFA1W')]['단축코드'].tolist())
+        
+        # for code in code_list:
+        #     self.code_list.append([True, "H0IOCNT0", code])
+        #     self.code_list.append([True, "H0EUCNT0", code]) # 야간옵션(EUREX)
         
         for is_subscribe, tr_id, tr_key in self.code_list:
             # TODO: 체결 통보 코드는 self.user_id가 None이 아닌 경우에만 등록
@@ -208,7 +266,6 @@ class KoreaInvestmentWSPlus:
             subscribe_data = json.dumps(fmt)
             try:
                 await self.websocket.send(subscribe_data)
-                print("[Websocket 구독/구독해제 요청 완료]\n", subscribe_data)
             except websockets.exceptions.ConnectionClosedOK:
                 print("⚠️ 웹소켓 연결이 끊어졌습니다. 다시 연결합니다.")
                 await self.ws_client()
@@ -257,6 +314,7 @@ class KoreaInvestmentWSPlus:
             tokens = tokens[:len(entry.model.__dataclass_fields__)]
             parsed_data = entry.model(*tokens)
             tr_key = parsed_data.futs_shrn_iscd
+            # print("(Parsed data)\n", [tr_id, tr_key, parsed_data])
             await self.queue.put([tr_id, tr_key, parsed_data])
 
         elif entry.type == MessageType.EXECUTION:
@@ -266,6 +324,7 @@ class KoreaInvestmentWSPlus:
             for i in range(int(count)):
                 parsed_data = entry.model(*tokens[i * items_count: (i + 1) * items_count])
                 tr_key = parsed_data.futs_shrn_iscd
+                # print("(Parsed data)\n", [tr_id, tr_key, parsed_data])
                 await self.queue.put([tr_id, tr_key, parsed_data])
 
         elif entry.type == MessageType.NOTICE:
@@ -273,6 +332,7 @@ class KoreaInvestmentWSPlus:
             tokens = decoded_str.split('^')
             parsed_data = entry.model(*tokens)
             tr_key = parsed_data.futs_shrn_iscd
+            # print("(Parsed data)\n", [tr_id, tr_key, parsed_data])
             await self.queue.put([tr_id, tr_key, parsed_data])
 
     async def get(self):
