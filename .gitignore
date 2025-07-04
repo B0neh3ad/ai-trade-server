@@ -177,3 +177,6 @@ pyrightconfig.json
 service-account.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python
+
+# token(for broker) data file
+token.dat
