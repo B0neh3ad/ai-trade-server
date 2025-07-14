@@ -33,7 +33,7 @@ def get_domestic_eurex_option_master_dataframe(base_dir):
             rf1_1 = rf1[0:1]
             rf1_2 = rf1[1:10]
             rf1_3 = rf1[10:22].strip()
-            rf1_4 = rf1[22:59].strip()
+            rf1_4 = rf1[22:59].strip().replace(',', '')
             wf1.write(rf1_1 + ',' + rf1_2 + ',' + rf1_3 + ',' + rf1_4 + '\n')
             rf2 = row[59:].lstrip()
             wf2.write(rf2)

@@ -23,8 +23,8 @@ def get_domestic_future_master_dataframe(base_dir):
     fo_idx_code_zip.close()
     file_name = os.path.join(base_dir, "fo_idx_code_mts.mst")
     
-    columns = ['상품종류','단축코드','표준코드',' 한글종목명',' ATM구분',
-               ' 행사가',' 월물구분코드',' 기초자산 단축코드',' 기초자산 명']
+    columns = ['상품종류','단축코드','표준코드','한글종목명','ATM구분',
+               '행사가','월물구분코드','기초자산 단축코드','기초자산 명']
     df=pd.read_table(file_name, sep='|',encoding='cp949',header=None)
     df.columns = columns
     df.to_csv('fo_idx_code_mts.csv',index=False)  # 현재 위치에 엑셀파일로 저장

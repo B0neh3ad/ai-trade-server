@@ -5,7 +5,7 @@ from dataclasses import dataclass
 ### 실시간호가 (H0IFASP0) ###
 @dataclass
 class DomesticIndexFutureOrderbookResponse:
-    futs_shrn_iscd: str    #선물 단축 종목코드
+    shrn_iscd: str    #선물 단축 종목코드
     bsop_hour: str    #영업 시간
     futs_askp1: str    #선물 매도호가1
     futs_askp2: str    #선물 매도호가2
@@ -47,7 +47,7 @@ class DomesticIndexFutureOrderbookResponse:
 ### 실시간체결가 (H0IFCNT0) ###
 @dataclass
 class DomesticIndexFutureExecutionResponse:
-    futs_shrn_iscd: str    #선물 단축 종목코드
+    shrn_iscd: str    #선물 단축 종목코드
     bsop_hour: str    #영업 시간
     futs_prdy_vrss: str    #선물 전일 대비
     prdy_vrss_sign: str    #전일 대비 부호
@@ -108,7 +108,7 @@ class DomesticIndexFutureNoticeResponse:
     seln_byov_cls: str    #매도매수구분
     rctf_cls: str    #정정구분
     oder_kind2: str    #주문종류2
-    futs_shrn_iscd: str    #선물 단축 종목코드
+    shrn_iscd: str    #선물 단축 종목코드
     cntg_qty: str    #체결 수량
     cntg_unpr: str    #체결단가
     futs_cntg_hour: str    #선물 체결 시간

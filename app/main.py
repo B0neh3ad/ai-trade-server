@@ -1,25 +1,15 @@
-import os
-from re import T
-from fastapi import FastAPI, WebSocket
-
+from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import asyncio
-
-from starlette.websockets import WebSocketState, WebSocketDisconnect
-
 import signal
 
 from app.api.rest import *
-from app.api.websocket import create_broker_ws
 from app.utils.process import signal_handler
 from app.global_vars import get_broker_ws, get_cred
-
 from app.routers import rest, websocket
-
 import firebase_admin
-
-from app.utils.websocket import broadcast_data
-import app.utils.websocket
+from app.utils.websocket import broadcast_data, update_option_subscriptions
+from app.utils.background_tasks import get_background_tasks
 
 firebase_admin.initialize_app(get_cred())
 
@@ -27,21 +17,34 @@ firebase_admin.initialize_app(get_cred())
 async def lifespan(app: FastAPI):
     fetch_task = None
     broadcast_task = None
+    option_task = None
+    background_tasks = get_background_tasks()
 
     async def startup():
-        nonlocal fetch_task, broadcast_task
+        nonlocal fetch_task, broadcast_task, option_task
         broker_ws = get_broker_ws()
 
         fetch_task = asyncio.create_task(broker_ws.ws_client())
         await asyncio.sleep(1)
+        
         broadcast_task = asyncio.create_task(broadcast_data())
+        await asyncio.sleep(1)
+        
+        option_task = asyncio.create_task(update_option_subscriptions())
+        
+        # Start background tasks for database maintenance
+        await background_tasks.start()
 
         print("서버 시작: 실시간 WebSocket 감시 시작")
     
     async def shutdown():
         print("서버 종료. WebSocket 연결을 종료합니다.")
+        
+        # Stop background tasks first
+        await background_tasks.stop()
+        
         broker_ws = get_broker_ws()
-        nonlocal fetch_task, broadcast_task
+        nonlocal fetch_task, broadcast_task, option_task
         if broker_ws is not None:
             if fetch_task:
                 fetch_task.cancel()
@@ -49,12 +52,19 @@ async def lifespan(app: FastAPI):
                     await fetch_task
                 except asyncio.CancelledError:
                     print(f"fetch_task 종료 완료")
+
         if broadcast_task:
             broadcast_task.cancel()
             try:
                 await broadcast_task
             except asyncio.CancelledError:
                 print(f"broadcast_task 종료 완료")
+        if option_task:
+            option_task.cancel()
+            try:
+                await option_task
+            except asyncio.CancelledError:
+                print(f"option_task 종료 완료")
 
     
     await startup()

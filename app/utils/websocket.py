@@ -1,7 +1,8 @@
 import json
 import time
-from typing import Dict, Set
+from typing import Dict, Set, List
 from fastapi import WebSocket
+import numpy as np
 import websockets
 from starlette.websockets import WebSocketState, WebSocketDisconnect
 
@@ -9,7 +10,9 @@ import asyncio
 
 from dataclasses import asdict
 
+from app.api.rest import fetch_domestic_futureoption_price
 from app.global_vars import get_broker_ws
+from app.utils.database import get_kospi_database
 
 subscribers: Dict[str, Set[WebSocket]] = {}
 
@@ -38,6 +41,9 @@ async def manage_subscription(websocket: WebSocket):
             if msg_type == "subscribe":
                 subscribers.setdefault(key, set()).add(websocket)
                 my_subscriptions.add(key)
+
+                # option은 서버 시작 시 구독되므로, update_subscription이 실행되지 않는다.
+                # 실행되더라도, 증권사 입장에서는 유효한 tr_id이므로 무시된다.
                 if key not in broker_ws.subscribed_to_broker:
                     await broker_ws.update_subscription(True, tr_id, tr_key)
                     print(f"Broker subscribe: {key}")
@@ -46,8 +52,8 @@ async def manage_subscription(websocket: WebSocket):
                 if key in subscribers and websocket in subscribers[key]:
                     subscribers[key].remove(websocket)
                     my_subscriptions.discard(key)
-                    if not subscribers[key]:
-                        await broker_ws.update_subscription(False, tr_id, tr_key)
+                    # if not subscribers[key]:
+                    #     await broker_ws.update_subscription(False, tr_id, tr_key)
                     print(f"Broker unsubscribe: {key}")
 
             print(f"Subscribers updated: {subscribers}")
@@ -66,6 +72,8 @@ async def manage_subscription(websocket: WebSocket):
 # broadcast_data: server -> client 방향으로 subscribed info 전달
 async def broadcast_data():    
     broker_ws = get_broker_ws()
+    kospi_db = get_kospi_database()
+    
     if broker_ws is None:
         return
 
@@ -79,6 +87,12 @@ async def broadcast_data():
                     
                 tr_id, tr_key, parsed_data = data
                 key = f"{tr_id}:{tr_key}"
+                
+                # Store data in database
+                try:
+                    await kospi_db.add_data(tr_id, tr_key, parsed_data)
+                except Exception as e:
+                    print(f"⚠️ 데이터베이스 저장 중 에러: {e}")
                 
                 for websocket in subscribers.get(key, set()).copy():
                     if websocket.application_state == WebSocketState.CONNECTED:
@@ -121,3 +135,53 @@ async def broadcast_data():
         print(f"⚠️ 웹소켓 핸들러 에러: {e}")
     finally:                
         print("WebSocket 세션 종료")
+
+### 옵션 관련 ###
+
+def get_target_option_codes(
+        index: float, option_key: str, price_range: List[int], weekly: bool = False
+        ) -> Set[str]:
+    """
+    ATM 부근 option code 반환
+    (pooling 함수에서 1초에 1번씩 호출될 예정)
+    - monthly: 콜 10개, 풋 10개
+        - 콜, 풋 둘다 등가격에서 1개 내가격 선에서부터 10개 가져오기
+    - weekly: 콜 5개, 풋 5개
+        - 콜, 풋 둘다 등가격에서 1개 내가격 선에서부터 5개 가져오기
+        - 예) 등가격 410인 경우
+            - 콜: 407.5 410 412.5 415 417.5
+            - 풋: 402.5 405 407.5 410 412.5
+    """
+    index = round(float(index) / 2.5) * 2.5 # 2.5원 단위로 변환
+    
+    cnt = 5 if weekly else 10
+    
+    call_strikes = np.arange(index - 2.5, index + 2.5 * (cnt - 1), 2.5)
+    put_strikes = np.arange(index - 2.5 * (cnt - 2), index + 2.5 * 2, 2.5)
+
+    call_option_codes = set([f"2{option_key}{int(strike):03d}" for strike in call_strikes])
+    put_option_codes = set([f"3{option_key}{int(strike):03d}" for strike in put_strikes])
+
+    return call_option_codes | put_option_codes
+
+# KOSPI200 지수옵션의 구독 관리
+async def update_option_subscriptions():
+    broker_ws = get_broker_ws()
+    if broker_ws is None:
+        return
+    
+    recent_future_code = broker_ws.futureoptions_info.futures[0].code
+    
+    while True:
+        index = fetch_domestic_futureoption_price("F", recent_future_code)["output3"]["bstp_nmix_prpr"] # KOSPI200 지수 현재가
+        for option in broker_ws.futureoptions_info.options:
+            await broker_ws.update_option_subscriptions(
+                option.code,
+                get_target_option_codes(index, option.code, [option.min_strike, option.max_strike], weekly = option.market_class_code != "")
+            )
+        await asyncio.sleep(2)
+
+if __name__ == "__main__":
+    print(get_target_option_codes("101W09", '01W07', [185, 500], weekly=False))
+    print(get_target_option_codes("101W09", '01W08', [185, 500], weekly=False))
+    print(get_target_option_codes("101W09", 'AFA2W', [185, 500], weekly=True))

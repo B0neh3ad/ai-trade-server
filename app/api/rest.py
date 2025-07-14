@@ -7,26 +7,37 @@ broker = KoreaInvestmentPlus(
     acc_no=ACC_NO
 )
 
-def fetch_domestic_stock_price(symbol: str) -> dict:
+def fetch_domestic_stock_price(symbol: str, print_log: bool = False) -> dict:
     """주식 현재가 조회"""
     data = broker.fetch_price(symbol)
-    print("[주식 현재가]", data)
+    if print_log:
+        print("[주식 현재가]", data)
     return data
 
-def fetch_domestic_futureoption_price(market_code: str, symbol: str) -> dict:
+def fetch_domestic_futureoption_price(market_code: str, symbol: str, print_log: bool = False) -> dict:
     """선물옵션 현재가 조회"""
     data = broker.fetch_domestic_futureoption_price(market_code, symbol)
-    print("[선물옵션 현재가]", data)
+    if print_log:
+        print("[선물옵션 현재가]", data)
     return data
 
-def fetch_domestic_futureoption_asking_price(market_code: str, symbol: str) -> dict:
+def fetch_domestic_futureoption_asking_price(market_code: str, symbol: str, print_log: bool = False) -> dict:
     """선물옵션 시세호가 조회"""
     data = broker.fetch_domestic_futureoption_asking_price(market_code, symbol)
-    print("[선물옵션 시세호가]", data)
+    if print_log:
+        print("[선물옵션 시세호가]", data)
     return data
 
-def fetch_display_board_callput(market_class_code: str, maturity_contract: str) -> dict:
+def fetch_display_board_option_list(print_log: bool = False) -> dict:
+    """옵션전광판 옵션월물리스트 조회"""
+    data = broker.fetch_display_board_option_list()
+    if print_log:
+        print("[옵션전광판 옵션월물리스트 조회]", data)
+    return data
+
+def fetch_display_board_callput(market_class_code: str, maturity_contract: str, print_log: bool = False) -> dict:
     """옵션전광판 콜풋 조회"""
     data = broker.fetch_display_board_callput(market_class_code, maturity_contract)
-    print("[옵션전광판 콜풋 조회]")
+    if print_log:
+        print("[옵션전광판 콜풋 조회]", data)
     return data

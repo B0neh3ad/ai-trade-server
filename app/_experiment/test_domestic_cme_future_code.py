@@ -21,8 +21,8 @@ def get_domestic_cme_future_master_dataframe(base_dir):
     fo_cme_code_zip.extractall()
     fo_cme_code_zip.close()
     file_name = os.path.join(base_dir, "fo_cme_code.mst")
-    columns = ['상품종류','단축코드','표준코드',' 한글종목명',
-               '행사가',' 기초자산 단축코드',' 기초자산 명']
+    columns = ['상품종류','단축코드','표준코드','한글종목명',
+               '행사가','기초자산 단축코드','기초자산 명']
     df=pd.DataFrame(columns=columns)
     ridx=1
     with open(file_name, mode="r", encoding="cp949") as f:

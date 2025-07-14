@@ -1,22 +1,22 @@
 from dataclasses import dataclass
 
-### 국내 야간선물(CME) ###
+### 국내 지수옵션 ###
 
-### 실시간호가 (H0MFASP0) ###
+### 실시간 호가 (H0IOASP0) ###
 @dataclass
-class DomesticCMEFutureOrderbookResponse:
-    shrn_iscd: str    #선물 단축 종목코드
+class DomesticIndexOptionOrderbookResponse:
+    shrn_iscd: str    #옵션 단축 종목코드
     bsop_hour: str    #영업 시간
-    futs_askp1: str    #선물 매도호가1
-    futs_askp2: str    #선물 매도호가2
-    futs_askp3: str    #선물 매도호가3
-    futs_askp4: str    #선물 매도호가4
-    futs_askp5: str    #선물 매도호가5
-    futs_bidp1: str    #선물 매수호가1
-    futs_bidp2: str    #선물 매수호가2
-    futs_bidp3: str    #선물 매수호가3
-    futs_bidp4: str    #선물 매수호가4
-    futs_bidp5: str    #선물 매수호가5
+    optn_askp1: str    #옵션 매도호가1
+    optn_askp2: str    #옵션 매도호가2
+    optn_askp3: str    #옵션 매도호가3
+    optn_askp4: str    #옵션 매도호가4
+    optn_askp5: str    #옵션 매도호가5
+    optn_bidp1: str    #옵션 매수호가1
+    optn_bidp2: str    #옵션 매수호가2
+    optn_bidp3: str    #옵션 매수호가3
+    optn_bidp4: str    #옵션 매수호가4
+    optn_bidp5: str    #옵션 매수호가5
     askp_csnu1: str    #매도호가 건수1
     askp_csnu2: str    #매도호가 건수2
     askp_csnu3: str    #매도호가 건수3
@@ -44,27 +44,22 @@ class DomesticCMEFutureOrderbookResponse:
     total_askp_rsqn_icdc: str    #총 매도호가 잔량 증감
     total_bidp_rsqn_icdc: str    #총 매수호가 잔량 증감
 
-### 실시간체결 (H0MFCNT0) ###
+### 실시간 체결가 (H0IOCNT0) ###
 @dataclass
-class DomesticCMEFutureExecutionResponse:
-    shrn_iscd: str    #선물 단축 종목코드
+class DomesticIndexOptionExecutionResponse:
+    shrn_iscd: str    #옵션 단축 종목코드
     bsop_hour: str    #영업 시간
-    futs_prdy_vrss: str    #선물 전일 대비
+    optn_prpr: str    #옵션 현재가
     prdy_vrss_sign: str    #전일 대비 부호
-    futs_prdy_ctrt: str    #선물 전일 대비율
-    futs_prpr: str    #선물 현재가
-    futs_oprc: str    #선물 시가2
-    futs_hgpr: str    #선물 최고가
-    futs_lwpr: str    #선물 최저가
+    optn_prdy_vrss: str    #옵션 전일 대비
+    prdy_ctrt: str    #전일 대비율
+    optn_oprc: str    #옵션 시가2
+    optn_hgpr: str    #옵션 최고가
+    optn_lwpr: str    #옵션 최저가
     last_cnqn: str    #최종 거래량
     acml_vol: str    #누적 거래량
     acml_tr_pbmn: str    #누적 거래 대금
     hts_thpr: str    #HTS 이론가
-    mrkt_basis: str    #시장 베이시스
-    dprt: str    #괴리율
-    nmsc_fctn_stpl_prc: str    #근월물 약정가
-    fmsc_fctn_stpl_prc: str    #원월물 약정가
-    spead_prc: str    #스프레드1
     hts_otst_stpl_qty: str    #HTS 미결제 약정 수량
     otst_stpl_qty_icdc: str    #미결제 약정 수량 증감
     oprc_hour: str    #시가 시간
@@ -77,12 +72,24 @@ class DomesticCMEFutureExecutionResponse:
     lwpr_vrss_prpr_sign: str    #최저가 대비 현재가 부호
     lwpr_vrss_nmix_prpr: str    #최저가 대비 지수 현재가
     shnu_rate: str    #매수2 비율
-    cttr: str    #체결강도
+    prmm_val: str    #프리미엄 값
+    invl_val: str    #내재가치 값
+    tmvl_val: str    #시간가치 값
+    delta: str    #델타
+    gama: str    #감마
+    vega: str    #베가
+    theta: str    #세타
+    rho: str    #로우
+    hts_ints_vltl: str    #HTS 내재 변동성
     esdg: str    #괴리도
     otst_stpl_rgbf_qty_icdc: str    #미결제 약정 직전 수량 증감
     thpr_basis: str    #이론 베이시스
-    futs_askp1: str    #선물 매도호가1
-    futs_bidp1: str    #선물 매수호가1
+    unas_hist_vltl: str    #역사적변동성
+    cttr: str    #체결강도
+    dprt: str    #괴리율
+    mrkt_basis: str    #시장 베이시스
+    optn_askp1: str    #옵션 매도호가1
+    optn_bidp1: str    #옵션 매수호가1
     askp_rsqn1: str    #매도호가 잔량1
     bidp_rsqn1: str    #매수호가 잔량1
     seln_cntg_csnu: str    #매도 체결 건수
@@ -93,26 +100,9 @@ class DomesticCMEFutureExecutionResponse:
     total_askp_rsqn: str    #총 매도호가 잔량
     total_bidp_rsqn: str    #총 매수호가 잔량
     prdy_vol_vrss_acml_vol_rate: str    #전일 거래량 대비 등락율
+    avrg_vltl: str    #평균 변동성
+    dscs_lrqn_vol: str    #협의대량누적 거래량
+    dynm_mxpr: str    #실시간상한가
+    dynm_llam: str    #실시간하한가
+    dynm_prc_limt_yn: str    #실시간가격제한구분
 
-### 실시간체결통보 (H0MFCNI0) ###
-@dataclass
-class DomesticCMEFutureNoticeResponse:
-    cust_id: str    #고객ID
-    acnt_no: str    #계좌번호
-    oder_no: str    #주문번호
-    ooder_no: str    #원주문번호
-    seln_byov_cls: str    #매도매수구분
-    rctf_cls: str    #정정구분
-    oder_kind2: str    #주문종류2
-    shrn_iscd: str    #선물 단축 종목코드
-    cntg_qty: str    #체결 수량
-    cntg_unpr: str    #체결단가
-    futs_cntg_hour: str    #선물 체결 시간
-    rfus_yn: str    #거부여부
-    cntg_yn: str    #체결여부
-    acpt_yn: str    #접수여부
-    brnc_no: str    #지점번호
-    oder_qty: str    #주문수량
-    acnt_name: str    #계좌명
-    cntg_isnm: str    #체결종목명
-    oder_cond: str    #주문조건
