@@ -43,7 +43,7 @@ async def manage_subscription(websocket: WebSocket):
                 my_subscriptions.add(key)
 
                 # option은 서버 시작 시 구독되므로, update_subscription이 실행되지 않는다.
-                # 실행되더라도, 증권사 입장에서는 유효한 tr_id이므로 무시된다.
+                # 실행되더라도, 증권사 입장에서는 유효하지 않은 tr_id이므로 무시된다.
                 if key not in broker_ws.subscribed_to_broker:
                     await broker_ws.update_subscription(True, tr_id, tr_key)
                     print(f"Broker subscribe: {key}")
@@ -70,7 +70,7 @@ async def manage_subscription(websocket: WebSocket):
                     print(f"Broker unsubscribe: {key}")
 
 # broadcast_data: server -> client 방향으로 subscribed info 전달
-async def broadcast_data():    
+async def broadcast_data(print_log: bool = False):    
     broker_ws = get_broker_ws()
     kospi_db = get_kospi_database()
     
@@ -101,8 +101,9 @@ async def broadcast_data():
                             "key": key,
                             "data": data_dict
                         }
-                        # print("[Data (server -> client)]")
-                        # print(send_data)
+                        if print_log:
+                            print("[Data (server -> client)]")
+                            print(send_data)
                         await asyncio.sleep(0.05)
                         try:
                             await websocket.send_json(send_data)

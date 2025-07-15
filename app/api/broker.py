@@ -305,10 +305,14 @@ class KoreaInvestmentWSPlus:
             options=options_info
         )
 
-    def get_options_info(self) -> FutureOptionInfo:
+    def get_options_info(self) -> List[OptionsInfo]:
+        if self.futureoptions_info is None:
+            return []
         return self.futureoptions_info.options
     
-    def get_futures_info(self) -> FutureOptionInfo:
+    def get_futures_info(self) -> List[FuturesInfo]:
+        if self.futureoptions_info is None:
+            return []
         return self.futureoptions_info.futures
 
     def get_market_status(self) -> MarketStatus:
@@ -331,7 +335,7 @@ class KoreaInvestmentWSPlus:
         else:
             return MarketStatus.OTHER
         
-    async def ws_client(self):
+    async def ws_client(self, print_log: bool = True):
         self.approval_key = self.get_approval()
         self.websocket = await websockets.connect(self.base_ws_url, ping_interval=None)
         if self.websocket is None or self.approval_key is None:
@@ -375,8 +379,9 @@ class KoreaInvestmentWSPlus:
                 try:
                     data = await self.websocket.recv()
                     # data = await fake_recv() # 테스트용
-                    print("\n[Data (Broker -> Server)]")
-                    print(data)
+                    if print_log:
+                        print("\n[Data (Broker -> Server)]")
+                        print(data)
                     if data[0] in ['0', '1']:
                         # 호가, 체결, 체결통보 중 하나인 경우
                         tokens = data.split('|')
@@ -416,7 +421,7 @@ class KoreaInvestmentWSPlus:
         except Exception as e:
             print(f"가격 감시 중 오류 발생: {e}")
 
-    async def update_subscription(self, is_subscription: bool, tr_id: str, tr_key: str):
+    async def update_subscription(self, is_subscription: bool, tr_id: str, tr_key: str, print_log: bool = False):
         if self.websocket is None or self.approval_key is None:
             return
         
@@ -451,8 +456,9 @@ class KoreaInvestmentWSPlus:
         
         if fmt["body"]["input"]["tr_id"] and fmt["body"]["input"]["tr_key"]:
             subscribe_data = json.dumps(fmt)
-            print("\n[Subscribe Request (Server -> Broker)]")
-            print(subscribe_data)
+            if print_log:
+                print("\n[Subscribe Request (Server -> Broker)]")
+                print(subscribe_data)
             try:
                 await self.websocket.send(subscribe_data)
             except websockets.exceptions.ConnectionClosedOK:
@@ -523,15 +529,13 @@ class KoreaInvestmentWSPlus:
         tr_id, data = tokens[1], tokens[3]
         entry = TR_ID_MAP[tr_id]
 
-        # 옵션 데이터는 일반화된 종목코드(broker_ws.futureoptions_info.options.code 참고)를 넣어야함.
-        if entry.instrument_type == InstrumentType.OPTION:
-            tr_id = tr_id[1:-3]
-
         if entry.message_type == MessageType.ORDERBOOK:
             tokens = data.split('^')
             tokens = tokens[:len(entry.model.__dataclass_fields__)]
             parsed_data = entry.model(*tokens)
             tr_key = parsed_data.shrn_iscd
+            if entry.instrument_type == InstrumentType.OPTION:
+                tr_key = tr_key[1:-3]
             if print_log:
                 print("(Parsed data)\n", [tr_id, tr_key, parsed_data])
             await self.queue.put([tr_id, tr_key, parsed_data])
@@ -543,6 +547,8 @@ class KoreaInvestmentWSPlus:
             for i in range(int(count)):
                 parsed_data = entry.model(*tokens[i * items_count: (i + 1) * items_count])
                 tr_key = parsed_data.shrn_iscd
+                if entry.instrument_type == InstrumentType.OPTION:
+                    tr_key = tr_key[1:-3]
                 if print_log:
                     print("(Parsed data)\n", [tr_id, tr_key, parsed_data])
                 await self.queue.put([tr_id, tr_key, parsed_data])
@@ -552,6 +558,8 @@ class KoreaInvestmentWSPlus:
             tokens = decoded_str.split('^')
             parsed_data = entry.model(*tokens)
             tr_key = parsed_data.shrn_iscd
+            if entry.instrument_type == InstrumentType.OPTION:
+                tr_key = tr_key[1:-3]
             if print_log:
                 print("(Parsed data)\n", [tr_id, tr_key, parsed_data])
             await self.queue.put([tr_id, tr_key, parsed_data])

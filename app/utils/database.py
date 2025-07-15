@@ -57,6 +57,8 @@ class KOSPIDatabase:
         tr_meta = TR_ID_MAP[tr_id]
         dataclass = tr_meta.model
         fields = dataclass.__dataclass_fields__
+        if tr_meta.message_type == MessageType.ORDERBOOK:
+            fields = ['bsop_hour', 'futs_askp1', 'futs_bidp1', 'askp_csnu1', 'bidp_csnu1', 'askp_rsqn1', 'bidp_rsqn1']
 
         field_names_str = ', '.join([f'{name} TEXT' for name in fields])
         sql = f"""
