@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from app.utils.parser.websocket.domestic_cme_future import *
+from app.utils.parser.websocket.domestic_eurex_option import DomesticEurexOptionExecutionResponse, DomesticEurexOptionNoticeResponse, DomesticEurexOptionOrderbookResponse
 from app.utils.parser.websocket.domestic_index_future import *
 from app.utils.parser.websocket.domestic_index_option import DomesticIndexOptionExecutionResponse, DomesticIndexOptionOrderbookResponse
 
@@ -81,16 +82,16 @@ TR_ID_MAP = {
     "H0EUASP0": TRMeta(
         InstrumentType.OPTION,
         MessageType.ORDERBOOK,
-        DomesticCMEFutureOrderbookResponse,
+        DomesticEurexOptionOrderbookResponse,
     ), 
     "H0EUCNT0": TRMeta(
         InstrumentType.OPTION,
         MessageType.EXECUTION,
-        DomesticCMEFutureExecutionResponse,
+        DomesticEurexOptionExecutionResponse,
     ),
     "H0EUCNI0": TRMeta(
         InstrumentType.OPTION,
         MessageType.NOTICE,
-        DomesticCMEFutureNoticeResponse,
+        DomesticEurexOptionNoticeResponse,
     ),
 }
