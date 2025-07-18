@@ -1,5 +1,5 @@
 from fastapi import APIRouter, WebSocket
-from app.utils.websocket import manage_subscription
+from app.services.websocket import manage_subscription
 
 router = APIRouter()
             

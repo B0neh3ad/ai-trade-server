@@ -1,7 +1,7 @@
 import numpy as np
 from typing import List, Set
 
-from app.api.rest import fetch_domestic_futureoption_price
+from app.services.rest import fetch_domestic_futureoption_price
 
 
 def get_target_option_codes(tr_key: str) -> List[str]:

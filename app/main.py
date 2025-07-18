@@ -3,13 +3,11 @@ from contextlib import asynccontextmanager
 import asyncio
 import signal
 
-from app.api.rest import *
-from app.utils.process import signal_handler
 from app.global_vars import get_broker_ws, get_cred
 from app.routers import rest, websocket
 import firebase_admin
-from app.utils.websocket import broadcast_data, update_option_subscriptions
-from app.utils.background_tasks import get_background_tasks
+from app.services.websocket import broadcast_data, update_option_subscriptions
+from app.db.background_tasks import get_background_tasks
 
 firebase_admin.initialize_app(get_cred())
 
@@ -70,6 +68,10 @@ async def lifespan(app: FastAPI):
     await startup()
     yield
     await shutdown()
+
+def signal_handler(sig, frame):
+    # TODO: 구독 중이던 정보 전부 구독 취소하기
+    print("\n🛑 Keyboard interrupt received.")
 
 # app = FastAPI()
 app = FastAPI(lifespan=lifespan)

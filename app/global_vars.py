@@ -2,7 +2,8 @@ import base64
 import os
 from firebase_admin import credentials, firestore
 
-from app.api.websocket import create_broker_ws
+from app.config import APP_KEY, APP_SECRET
+from app.brokers.KoreaInvestment.main import KoreaInvestmentWSPlus
 
 cred = None
 db = None
@@ -15,6 +16,15 @@ def write_service_account_file(file_path: str = "/etc/secrets/service-account.js
     json_str = base64.b64decode(encoded).decode()
     with open(file_path, "w") as f:
         f.write(json_str)
+
+def create_broker_ws(code_list: list = None, user_id: str = None):
+    broker_ws = KoreaInvestmentWSPlus(
+        api_key=APP_KEY,
+        api_secret=APP_SECRET,
+        code_list=code_list,
+        user_id=user_id  # 체결통보용 htsid
+    )
+    return broker_ws
 
 def get_cred():
     global cred

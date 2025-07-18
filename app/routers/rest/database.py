@@ -3,7 +3,7 @@ from typing import Optional, List, Dict
 from datetime import datetime
 import pandas as pd
 
-from app.utils.database import get_kospi_database
+from app.db.database import get_kospi_database
 
 router = APIRouter()
 
