@@ -16,7 +16,7 @@ from datetime import datetime, time, timedelta
 
 import mojito
 
-from app.test.websocket import fake_recv
+from app.mockup.websocket import fake_recv
 from app.utils.parser.websocket.map import TR_ID_MAP, InstrumentType, MessageType
 
 EXCHANGE_CODE = {
