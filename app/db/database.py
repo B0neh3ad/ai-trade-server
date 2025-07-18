@@ -272,6 +272,31 @@ class KOSPIDatabase:
                 except:
                     continue
     
+    async def save_chart_data_to_db(self, symbol: str, chart_data: list, data_type: str):
+        """차트 데이터를 데이터베이스에 저장"""
+        if not chart_data:
+            print(f"No chart data to save for {symbol} {data_type}")
+            return
+        
+        # Table name: symbol_datatype (e.g., 101W09_1min, 101W09_daily)
+        table_name = f"{symbol}_{data_type}"
+        date_str = datetime.now().strftime("%Y%m%d")
+        db_path = self.get_db_path(date_str)
+        
+        try:
+            # Convert chart data to DataFrame
+            df = pd.DataFrame(chart_data)
+            df['timestamp'] = datetime.now().isoformat()
+            
+            # Save to database
+            with sqlite3.connect(db_path) as conn:
+                df.to_sql(table_name, conn, if_exists='append', index=False)
+            
+            print(f"✅ Saved {len(chart_data)} records to {table_name} in {db_path}")
+            
+        except Exception as e:
+            print(f"⚠️ Error saving chart data to database: {e}")
+
     def __del__(self):
         """Cleanup on destruction"""
         if hasattr(self, 'executor'):

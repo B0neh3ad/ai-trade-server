@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.services.rest import fetch_display_board_callput, fetch_display_board_option_list, fetch_domestic_futureoption_asking_price, fetch_domestic_futureoption_price, fetch_domestic_stock_price
+from app.services.rest import fetch_display_board_callput, fetch_display_board_option_list, fetch_domestic_futureoption_asking_price, fetch_domestic_futureoption_daily_fuopchartprice, fetch_domestic_futureoption_price, fetch_domestic_futureoption_time_fuopchartprice, fetch_domestic_stock_price
 from app.global_vars import get_broker_ws
 from app._noti.firebase import FCMTokenData, _store_fcm_token
 from app._noti.main import _push_notification
@@ -18,13 +18,13 @@ async def get_domestic_stock_price(symbol: str = "005930"):
     return JSONResponse(content=data)
 
 @router.get("/domestic-futureoption/price")
-async def get_domestic_futureoption_price(market_code: str = "F", symbol: str = "101W09"):
-    data = fetch_domestic_futureoption_price(market_code, symbol)
+async def get_domestic_futureoption_price(market_div_code: str = "F", symbol: str = "101W09"):
+    data = fetch_domestic_futureoption_price(market_div_code, symbol)
     return JSONResponse(content=data)
 
 @router.get("/domestic-futureoption/asking-price")
-async def get_domestic_futureoption_asking_price(market_code: str = "F", symbol: str = "101W09"):
-    data = fetch_domestic_futureoption_asking_price(market_code, symbol)
+async def get_domestic_futureoption_asking_price(market_div_code: str = "F", symbol: str = "101W09"):
+    data = fetch_domestic_futureoption_asking_price(market_div_code, symbol)
     return JSONResponse(content=data)
 
 @router.get("/domestic-futureoption/display-board-option-list")
@@ -36,6 +36,27 @@ async def get_domestic_futureoption_display_board_option_list():
 async def get_domestic_futureoption_display_board_callput(market_class_code: str = "", maturity_contract: str = "202507"):
     print(f"[get_domestic_futureoption_display_board_callput] market_class_code: {market_class_code}, maturity_contract: {maturity_contract}")
     data = fetch_display_board_callput(market_class_code, maturity_contract)
+    return JSONResponse(content=data)
+
+@router.get("/domestic-futureoption/time-fuopchartprice")
+async def get_domestic_futureoption_time_fuopchartprice(
+    market_div_code: str = "F", symbol: str = "101W09", date: str = "20250717", hour: str = "150000",
+    hour_class_code: str = "60", include_pw_data: bool = False
+):
+    data = fetch_domestic_futureoption_time_fuopchartprice(
+        market_div_code, symbol, date, hour, hour_class_code, include_pw_data
+    )
+    return JSONResponse(content=data)
+
+@router.get("/domestic-futureoption/daily-fuopchartprice")
+async def get_domestic_futureoption_daily_fuopchartprice(
+    market_div_code: str = "F", symbol: str = "101W09",
+    start_date: str = "20250701", end_date: str = "20250717",
+    period_div_code: str = "D"
+):
+    data = fetch_domestic_futureoption_daily_fuopchartprice(
+        market_div_code, symbol, start_date, end_date, period_div_code
+    )
     return JSONResponse(content=data)
 
 @router.get("/domestic-futureoption/options-info")

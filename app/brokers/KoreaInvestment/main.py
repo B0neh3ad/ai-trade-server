@@ -65,13 +65,14 @@ class KoreaInvestmentPlus(mojito.KoreaInvestment):
                  exchange: str = "서울", mock: bool = False):
         super().__init__(api_key, api_secret, acc_no, exchange, mock)
 
-    def fetch_domestic_futureoption_price(self, market_code: str, symbol: str) -> dict:
-        """선물옵션시세
-        Args:
-            market_code (str): 시장 분류코드
-            symbol (str): 종목코드
-        Returns:
-            dict: API 개발 가이드 참조
+    def fetch_domestic_futureoption_price(self, market_div_code: str, symbol: str) -> dict:
+        """
+            선물옵션시세
+            Args:
+                market_div_code (str): 시장 분류코드
+                symbol (str): 종목코드
+            Returns:
+                dict: API 개발 가이드 참조
         """
         path = "/uapi/domestic-futureoption/v1/quotations/inquire-price"
         url = f"{self.base_url}/{path}"
@@ -83,17 +84,17 @@ class KoreaInvestmentPlus(mojito.KoreaInvestment):
            "tr_id": "FHMIF10000000"
         }
         params = {
-            "FID_COND_MRKT_DIV_CODE": market_code,
+            "FID_COND_MRKT_DIV_CODE": market_div_code,
             "FID_INPUT_ISCD": symbol
         }
         resp = requests.get(url, headers=headers, params=params)
         return resp.json()
 
-    def fetch_domestic_futureoption_asking_price(self, market_code: str, symbol: str) -> dict:
+    def fetch_domestic_futureoption_asking_price(self, market_div_code: str, symbol: str) -> dict:
         """
             선물옵션 시세호가 조회 API
             Args:
-                market_code (str): 시장 분류코드
+                market_div_code (str): 시장 분류코드
                 symbol (str): 종목코드
             Returns:
                 dict: API 개발 가이드 참조
@@ -108,14 +109,16 @@ class KoreaInvestmentPlus(mojito.KoreaInvestment):
            "tr_id": "FHMIF10010000"
         }
         params = {
-            "FID_COND_MRKT_DIV_CODE": market_code,
+            "FID_COND_MRKT_DIV_CODE": market_div_code,
             "FID_INPUT_ISCD": symbol
         }
         resp = requests.get(url, headers=headers, params=params)
         return resp.json()
     
     def fetch_display_board_option_list(self) -> dict:
-        """옵션전광판 옵션월물리스트 조회"""
+        """
+            옵션전광판 옵션월물리스트 조회
+        """
         path = "/uapi/domestic-futureoption/v1/quotations/display-board-option-list"
         url = f"{self.base_url}/{path}"
         headers = {
@@ -171,6 +174,86 @@ class KoreaInvestmentPlus(mojito.KoreaInvestment):
             "FID_MTRT_CNT": maturity_contract,
             "FID_COND_MRKT_CLS_CODE": market_class_code,
             "FID_MRKT_CLS_CODE1": "PO", # 풋옵션
+        }
+        resp = requests.get(url, headers=headers, params=params)
+        return resp.json()
+
+    def fetch_domestic_futureoption_time_fuopchartprice(self, market_div_code: str, symbol: str, 
+                                                       date: str, hour: str,
+                                                       hour_class_code: str,
+                                                       include_pw_data: bool) -> dict:
+        """
+            선물옵션 분봉조회
+
+            Args:
+                market_div_code (str): 시장 분류코드
+                symbol (str): 종목코드
+                date (str): 입력 날짜 기준으로 이전 기간 조회(YYYYMMDD)
+                hour (str): 입력 시간 기준으로 이전 시간 조회(HHMMSS)
+                    - CM(야간선물), EU(야간옵션)인 경우, 자정 이후 시간은 +24시간으로 입력
+                    ex) 253000 입력 시, 새벽 1시 30분부터 역순으로 분봉 조회
+                hour_class_code (str): 시간 구분 코드
+                    - 30: 30초, 60: 1분, 3600: 1시간
+                include_pw_data (bool): 과거 데이터 포함 여부
+                    - True: 과거(Y)
+                    - False: 당일(N)
+            Returns:
+                dict: API 개발 가이드 참조
+        """
+        path = "/uapi/domestic-futureoption/v1/quotations/inquire-time-fuopchartprice"
+        url = f"{self.base_url}/{path}"
+        headers = {
+            "content-type": "application/json",
+            "authorization": self.access_token,
+            "appKey": self.api_key,
+            "appSecret": self.api_secret,
+            "tr_id": "FHKIF03020200",
+            "custtype": "P"
+        }
+        params = {
+            "FID_COND_MRKT_DIV_CODE": market_div_code,
+            "FID_INPUT_ISCD": symbol,
+            "FID_HOUR_CLS_CODE": hour_class_code,
+            "FID_PW_DATA_INCU_YN": "Y" if include_pw_data else "N",
+            "FID_FAKE_TICK_INCU_YN": "N",  # 허봉 포함 여부
+            "FID_INPUT_DATE_1": date,
+            "FID_INPUT_HOUR_1": hour,
+        }
+        resp = requests.get(url, headers=headers, params=params)
+        return resp.json()
+
+    def fetch_domestic_futureoption_daily_fuopchartprice(self, market_div_code: str, symbol: str,
+                                                        start_date: str, end_date: str,
+                                                        period_div_code: str) -> dict:
+        """
+            선물옵션 기간별 시세
+
+            Args:
+                market_div_code (str): 시장 분류코드
+                symbol (str): 종목코드
+                start_date (str): 시작 날짜 (YYYYMMDD)
+                end_date (str): 종료 날짜 (YYYYMMDD)
+                period_div_code (str): 기간 구분 코드
+                    - D: 일봉, W: 주봉, M: 월봉, Y: 년봉
+            Returns:
+                dict: API 개발 가이드 참조
+        """
+        path = "/uapi/domestic-futureoption/v1/quotations/inquire-daily-fuopchartprice"
+        url = f"{self.base_url}/{path}"
+        headers = {
+            "content-type": "application/json",
+            "authorization": self.access_token,
+            "appKey": self.api_key,
+            "appSecret": self.api_secret,
+            "tr_id": "FHKIF03020100",
+            "custtype": "P"
+        }
+        params = {
+            "FID_COND_MRKT_DIV_CODE": market_div_code,
+            "FID_INPUT_ISCD": symbol,
+            "FID_INPUT_DATE_1": start_date,
+            "FID_INPUT_DATE_2": end_date,
+            "FID_PERIOD_DIV_CODE": period_div_code
         }
         resp = requests.get(url, headers=headers, params=params)
         return resp.json()
